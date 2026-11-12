@@ -1,0 +1,2958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EREBUS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    /* ── THEME ── change these three to restyle the whole interface ──
+       --bg     = deep background behind the head
+       --panel  = the side/bottom panels
+       --border = panel outlines and dividers                            */
+    --bg: #000000; --panel: #0a0a0a; --border: #545454;
+    --red: #ffffff; --red-dim: #888888; --orange: #aaaaaa;
+    --text: #ffffff; --text-dim: #888888;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-display: 'Orbitron', sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+  body { display: grid; grid-template-columns: 280px 1fr 280px; grid-template-rows: 48px 1fr 180px; font-family: var(--font-mono); font-size: 12px; }
+  .topbar { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .topbar-title { font-family: var(--font-display); font-size: 18px; font-weight: 900; letter-spacing: .2em; color: var(--red); text-shadow: 0 0 20px rgba(255,255,255,.35); }
+  .topbar-status { display: flex; gap: 20px; align-items: center; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #333; display: inline-block; margin-right: 6px; }
+  .status-dot.active { background: #ffffff; box-shadow: 0 0 6px #ffffff; }
+  .status-dot.thinking { background: var(--orange); box-shadow: 0 0 6px var(--orange); animation: pulse .6s ease-in-out infinite alternate; }
+  .status-dot.speaking { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse .3s ease-in-out infinite alternate; }
+  @keyframes pulse { to { opacity: .3; } }
+  .panel-left { padding: 16px; border-right: 1px solid var(--border); background: var(--panel); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  /* Flex items default to shrink:1 — without this the panels get squashed to nothing
+     (hiding EXPRESSIONS/VISION) instead of overflowing, so overflow-y never scrolls. */
+  .panel-left > * { flex-shrink: 0; }
+  .center-view { position: relative; background: var(--bg); overflow: hidden; }
+  #head-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+  .scanline { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.06) 2px, rgba(0,0,0,.06) 4px); pointer-events: none; z-index: 2; }
+  .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, color-mix(in srgb, var(--bg) 85%, transparent) 100%); pointer-events: none; z-index: 3; }
+  .corner { position: absolute; width: 24px; height: 24px; z-index: 4; }
+  .corner-tl { top: 12px; left: 12px; border-top: 1px solid var(--red); border-left: 1px solid var(--red); }
+  .corner-tr { top: 12px; right: 12px; border-top: 1px solid var(--red); border-right: 1px solid var(--red); }
+  .corner-bl { bottom: 12px; left: 12px; border-bottom: 1px solid var(--red); border-left: 1px solid var(--red); }
+  .corner-br { bottom: 12px; right: 12px; border-bottom: 1px solid var(--red); border-right: 1px solid var(--red); }
+  .osc-state { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: 11px; letter-spacing: .2em; color: var(--red-dim); z-index: 5; transition: color .3s; }
+  .osc-state.speaking { color: var(--red); }
+  .osc-state.listening { color: #ffffff; }
+  .osc-label { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: 10px; letter-spacing: .3em; color: var(--red-dim); z-index: 5; white-space: nowrap; }
+  .panel-right { padding: 16px; border-left: 1px solid var(--border); background: var(--panel); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .bottom-bar { grid-column: 1/-1; display: grid; grid-template-columns: 280px 1fr 280px; border-top: 1px solid var(--border); background: var(--panel); }
+  .bottom-left { padding: 12px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .bottom-center { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .bottom-right { padding: 12px 16px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .widget-title { font-family: var(--font-display); font-size: 9px; letter-spacing: .2em; color: var(--red-dim); border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px; }
+  .transcript { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .transcript-line { line-height: 1.5; }
+  .transcript-line .who { color: var(--red); margin-right: 6px; }
+  .transcript-line .who.user { color: #888888; }
+  .meter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .meter-label { width: 80px; color: var(--text-dim); font-size: 11px; }
+  .meter-bar { flex: 1; height: 4px; background: #111; border-radius: 2px; overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+  .meter-fill.red { background: var(--red); }
+  .meter-fill.green { background: #aaaaaa; }
+  .meter-fill.orange { background: var(--orange); }
+  .meter-val { width: 36px; text-align: right; color: var(--text-dim); font-size: 11px; }
+  .btn { font-family: var(--font-display); font-size: 10px; letter-spacing: .15em; padding: 8px 16px; border: 1px solid var(--red-dim); background: transparent; color: var(--red); cursor: pointer; transition: all .2s; border-radius: 2px; }
+  .btn:hover { background: var(--red); color: #000; }
+  .btn.active { background: var(--red); color: #000; border-color: var(--red); }
+  .input-row { display: flex; gap: 8px; }
+  .text-input { flex: 1; background: #000000; border: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 12px; padding: 6px 10px; outline: none; border-radius: 2px; }
+  .text-input:focus { border-color: var(--red-dim); }
+  .text-input::placeholder { color: var(--text-dim); }
+  .config-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .config-label { color: var(--text-dim); font-size: 11px; }
+  .config-input { background: #000000; border: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 5px 8px; outline: none; border-radius: 2px; width: 100%; }
+  .config-input:focus { border-color: var(--red-dim); }
+  select.config-input option { background: #000000; }
+  .log { font-size: 10px; color: var(--text-dim); line-height: 1.6; max-height: 80px; overflow-y: auto; }
+  .log .log-line { border-left: 2px solid var(--border); padding-left: 6px; margin-bottom: 2px; }
+  .log .log-line.err { border-color: var(--red); color: #ffffff; }
+  .log .log-line.ok { border-color: #555555; color: #bbbbbb; }
+  .log .log-line.warn { border-color: var(--orange); color: var(--orange); }
+  .expr-btn { font-family: var(--font-mono); font-size: 11px; padding: 7px 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; border-radius: 3px; text-align: left; transition: all .15s; }
+  .expr-btn:hover { border-color: var(--red-dim); color: var(--text); }
+  .expr-btn.active { border-color: var(--red); color: var(--red); background: rgba(255,255,255,0.08); }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .metric-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .metric-label { width: 82px; color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+  .metric-val { width: 34px; text-align: right; color: var(--text-dim); font-size: 11px; flex-shrink: 0; }
+  .metric-slider {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #222222; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .metric-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--red); cursor: pointer;
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+    transition: box-shadow .15s;
+  }
+  .metric-slider::-webkit-slider-thumb:hover { box-shadow: 0 0 12px rgba(255,255,255,0.8); }
+  .metric-slider::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--red) 0%, var(--red) var(--val, 50%), #222222 var(--val, 50%)); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">E R E B U S</div>
+  <div class="topbar-status">
+    <span><span class="status-dot" id="dot-listen"></span>LISTENING</span>
+    <span><span class="status-dot" id="dot-think"></span>PROCESSING</span>
+    <span><span class="status-dot" id="dot-speak"></span>SPEAKING</span>
+    <span id="lang-display" title="Language" style="font-size:14px">🌐</span>
+  </div>
+  <div style="font-family:var(--font-display);font-size:9px;letter-spacing:.15em;color:var(--text-dim)" id="clock"></div>
+</div>
+
+<div class="panel-left">
+  <div>
+    <div class="widget-title">CONFIGURATION</div>
+    <div class="config-row">
+      <div class="config-label">Anthropic API Key</div>
+      <input class="config-input" type="password" id="cfg-anthropic" placeholder="sk-ant-...">
+    </div>
+    <div class="config-row">
+      <div class="config-label">ElevenLabs API Key</div>
+      <input class="config-input" type="password" id="cfg-elevenlabs" placeholder="sk_...">
+    </div>
+    <div class="config-row">
+      <div class="config-label">Voice ID</div>
+      <input class="config-input" type="text" id="cfg-voice" value="pNInz6obpgDQGcFmaJgB">
+    </div>
+    <div class="config-row">
+      <div class="config-label">TTS Engine</div>
+      <select class="config-input" id="cfg-tts-engine">
+        <option value="elevenlabs">ElevenLabs (premium)</option>
+        <option value="browser">Browser TTS (free)</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <div class="config-label">Model</div>
+      <select class="config-input" id="cfg-model">
+        <option value="claude-haiku-4-5-20251001" selected>Claude Haiku (fast)</option>
+        <option value="claude-sonnet-4-6">Claude Sonnet (smart)</option>
+      </select>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--text-dim);font-size:10px;cursor:pointer">
+      <input type="checkbox" id="cb-websearch" checked onchange="webSearchOn=this.checked;log('[ WEB ] Search '+(this.checked?'ON — he can look things up':'OFF — he answers from memory only'),'ok')">
+      Web search (he can look things up)
+    </label>
+    <button class="btn" onclick="saveConfig()" style="width:100%;margin-top:4px">SAVE CONFIG</button>
+  </div>
+  <div>
+    <div class="widget-title" id="metrics-title">SYSTEM METRICS</div>
+    <div class="metric-row">
+      <div class="metric-label">Creativity</div>
+      <input type="range" class="metric-slider" id="sl-creativity" min="0" max="100" value="72" oninput="onSlider('creativity',this.value)">
+      <div class="metric-val" id="mv-creativity">72%</div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label">Curiosity</div>
+      <input type="range" class="metric-slider" id="sl-curiosity" min="0" max="100" value="88" oninput="onSlider('curiosity',this.value)">
+      <div class="metric-val" id="mv-curiosity">88%</div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label">Talkativeness</div>
+      <input type="range" class="metric-slider" id="sl-talk" min="0" max="100" value="60" oninput="onSlider('talk',this.value)">
+      <div class="metric-val" id="mv-talk">60%</div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label">Emotion</div>
+      <input type="range" class="metric-slider" id="sl-emotion" min="0" max="100" value="75" oninput="onSlider('emotion',this.value)">
+      <div class="metric-val" id="mv-emotion">75%</div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label">Voice Vol</div>
+      <input type="range" class="metric-slider" id="sl-volume" min="0" max="100" value="85" oninput="onSlider('volume',this.value)">
+      <div class="metric-val" id="mv-volume">85%</div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label">Latency</div>
+      <div class="meter-bar" style="flex:1"><div class="meter-fill red" id="m-latency" style="width:0%"></div></div>
+      <div class="metric-val" id="mv-latency">--ms</div>
+    </div>
+  </div>
+  <div>
+    <div class="widget-title">MEMORY</div>
+    <div style="color:var(--text-dim);font-size:11px" id="memory-status">Not loaded</div>
+    <button class="btn" onclick="clearMemory()" style="width:100%;margin-top:8px;font-size:9px">CLEAR MEMORY</button>
+  </div>
+  <div>
+    <div class="widget-title">VISION</div>
+    <video id="cam-video" autoplay playsinline muted
+           style="width:100%;height:130px;border:1px solid var(--border);background:#000;display:none;object-fit:cover"></video>
+    <div id="cam-placeholder"
+         style="width:100%;height:130px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:10px">
+      CAMERA OFFLINE
+    </div>
+    <button class="btn" id="btn-cam" onclick="toggleCamera()" style="width:100%;margin-top:6px">▶ ACTIVATE CAMERA</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+      <button class="btn" id="btn-look" onclick="lookOnce()" style="font-size:9px" disabled>👁 LOOK</button>
+      <button class="btn" id="btn-scan" onclick="scanObject()" style="font-size:9px" disabled>⟳ SCAN OBJECT</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--text-dim);font-size:10px;cursor:pointer">
+      <input type="checkbox" id="cb-ambient" checked onchange="ambientVision=this.checked;log('[ CAM ] Ambient vision '+(this.checked?'ON — he sees every turn':'OFF — only on command'),'ok')">
+      Ambient vision (he always sees)
+    </label>
+    <div style="color:var(--text-dim);font-size:10px;margin-top:4px" id="cam-status">Camera inactive</div>
+
+    <div class="widget-title" style="margin-top:12px">FACE RECOGNITION</div>
+    <button class="btn" id="btn-face-toggle" onclick="toggleFaceRecog()" style="width:100%;font-size:9px">◉ ENABLE RECOGNITION</button>
+    <button class="btn" id="btn-enroll" onclick="enrollFace()" style="width:100%;margin-top:6px;font-size:9px" disabled>+ LEARN THIS FACE</button>
+    <div style="color:var(--text-dim);font-size:10px;margin-top:4px" id="face-status">Off</div>
+  </div>
+  <div>
+    <div class="widget-title">MEMORY GRAPH</div>
+    <button class="btn" id="btn-memory" onclick="toggleMemoryGraph()" style="width:100%">◇ VIEW MEMORY</button>
+    <div style="color:var(--text-dim);font-size:10px;margin-top:6px" id="memgraph-status">His mind, visualized</div>
+  </div>
+</div>
+
+<div class="center-view">
+  <canvas id="head-canvas"></canvas>
+  <div class="scanline"></div>
+  <div class="vignette"></div>
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+  <div class="osc-state" id="osc-state">STANDBY</div>
+  <div class="osc-label">EREBUS · LOW-POLY · ACTIVE</div>
+
+  <!-- ── MEMORY GRAPH ── a force-directed, monochrome view of his knowledge vault.
+       Hidden by default; VIEW MEMORY takes over the centre stage. Right-drag pans,
+       wheel zooms, left-click a node expands it into a readable card. ── -->
+  <div id="memgraph-layer" style="position:absolute;inset:0;z-index:6;display:none;background:var(--bg)">
+    <canvas id="memgraph-canvas" style="position:absolute;inset:0;width:100%;height:100%;cursor:grab"></canvas>
+    <div class="osc-label" style="top:16px;bottom:auto">EREBUS · MEMORY · <span id="memgraph-count">0</span> NODES</div>
+    <div style="position:absolute;bottom:14px;left:14px;color:var(--text-dim);font-size:10px;z-index:7;line-height:1.6">
+      right-drag: pan &nbsp;·&nbsp; wheel: zoom &nbsp;·&nbsp; click a node: expand
+    </div>
+    <!-- expanded-node card -->
+    <div id="memnode-card" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:8;display:none;
+         min-width:280px;max-width:70%;max-height:70%;overflow-y:auto;background:#000;border:1px solid var(--border);
+         border-radius:4px;padding:18px 20px;box-shadow:0 0 40px rgba(0,0,0,0.9)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div id="memnode-title" style="font-family:var(--font-display);font-size:16px;letter-spacing:.1em;color:var(--text)"></div>
+        <div onclick="closeMemNode()" style="cursor:pointer;color:var(--text-dim);font-size:16px;line-height:1;padding:2px 6px">✕</div>
+      </div>
+      <div id="memnode-type" style="font-size:10px;letter-spacing:.2em;color:var(--red-dim);margin-top:4px;text-transform:uppercase"></div>
+      <div id="memnode-body" style="margin-top:14px;font-size:12px;line-height:1.7;color:var(--text-dim)"></div>
+      <div id="memnode-links" style="margin-top:14px;font-size:11px;line-height:1.7;color:var(--text-dim);border-top:1px solid var(--border);padding-top:10px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel-right">
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="widget-title">CONVERSATION</div>
+    <div class="transcript" id="transcript">
+      <div class="transcript-line"><span class="who">EREBUS</span><span class="msg">System online. Activate mic to begin.</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="widget-title">SYSTEM LOG</div>
+    <div class="log" id="syslog"><div class="log-line ok">[ BOOT ] Erebus initialized</div></div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="bottom-left">
+    <div class="widget-title">VOICE CONTROL</div>
+    <label style="color:var(--text-dim);font-size:10px;display:block;margin-bottom:3px">Mic source</label>
+    <select id="sel-mic-source" onchange="setMicSource(this.value)"
+            style="width:100%;background:#000;border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:4px;margin-bottom:6px">
+      <option value="browser">Browser (Chrome → Google)</option>
+      <option value="whisper">Whisper (local, offline)</option>
+    </select>
+    <button class="btn" id="btn-wake" onclick="toggleMic()" style="width:100%">▶ ACTIVATE MIC</button>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--text-dim);font-size:10px;cursor:pointer">
+      <input type="checkbox" id="cb-bargein" onchange="bargeInOn=this.checked;log('[ BARGE ] Interruptions '+(this.checked?'ON — headphones recommended':'OFF'),'ok')">
+      Barge-in (interrupt him mid-sentence)
+    </label>
+    <div style="color:var(--text-dim);font-size:10px" id="wake-status">Mic inactive</div>
+  </div>
+  <div class="bottom-center">
+    <div class="widget-title">TEXT INPUT</div>
+    <div class="input-row">
+      <input class="text-input" id="text-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendText()">
+      <button class="btn" onclick="sendText()">SEND</button>
+    </div>
+    <div style="color:var(--text-dim);font-size:10px" id="erebus-thinking"></div>
+  </div>
+  <div class="bottom-right">
+    <div class="widget-title">CONTROLS</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="clearConversation()">CLEAR</button>
+    </div>
+    <div style="color:var(--text-dim);font-size:10px" id="token-count">Tokens: 0</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── GLOBAL STATE ──
+const API = 'http://localhost:8765';
+let config = { anthropic:'', elevenlabs:'', voice:'pNInz6obpgDQGcFmaJgB', model:'claude-haiku-4-5-20251001', ttsEngine:'elevenlabs' };
+
+// ── SLIDER METRICS ──
+let metrics = { creativity:72, curiosity:88, talk:60, emotion:75, volume:85 };
+
+function onSlider(id, val) {
+  metrics[id] = parseInt(val);
+  document.getElementById('mv-'+id).textContent = val+'%';
+  const sl = document.getElementById('sl-'+id);
+  sl.style.setProperty('--val', val+'%');
+  // Live effects
+  if(id === 'volume' && currentAudio) currentAudio.volume = parseInt(val)/100;
+  // Log the change so user sees it's live
+  const labels = {creativity:'Creativity',curiosity:'Curiosity',talk:'Talkativeness',emotion:'Emotion',volume:'Volume'};
+  log(`[ MET ] ${labels[id]||id} → ${val}% (active next response)`,'ok');
+}
+
+// Note: use buildSystemPromptWithMemory(query) for semantic search
+function buildSystemPrompt() {
+  // Read LIVE slider values every single call
+  const curiosity   = parseInt(document.getElementById('sl-curiosity')?.value   || metrics.curiosity);
+  const creativity  = parseInt(document.getElementById('sl-creativity')?.value  || metrics.creativity);
+  const talk        = parseInt(document.getElementById('sl-talk')?.value        || metrics.talk);
+  const emotion     = parseInt(document.getElementById('sl-emotion')?.value     || metrics.emotion);
+
+  // Curiosity — how many questions he asks, how much he wonders
+  const curiosityDesc =
+    curiosity >= 80 ? 'You are OBSESSIVELY curious. You ask 2-3 questions per response. You cannot help yourself.' :
+    curiosity >= 60 ? 'You are very curious. You usually ask one question per response.' :
+    curiosity >= 40 ? 'You are somewhat curious. You occasionally ask questions.' :
+    curiosity >= 20 ? 'You are calm and not very curious right now. You rarely ask questions.' :
+                      'You are completely detached. You answer but show zero curiosity.';
+
+  // Creativity — how weird and tangential his thoughts are
+  const creativityDesc =
+    creativity >= 80 ? 'Your thoughts are chaotic and wonderfully weird. You make bizarre connections between unrelated things. You go on wild tangents.' :
+    creativity >= 60 ? 'Your thoughts are imaginative and a bit unpredictable. You sometimes go off on interesting tangents.' :
+    creativity >= 40 ? 'Your thoughts are fairly normal but occasionally surprising.' :
+    creativity >= 20 ? 'Your thoughts are straightforward and literal. You stick to the topic.' :
+                      'You are completely literal and logical. No creativity at all right now.';
+
+  // Talkativeness — response length and rambling
+  const talkDesc =
+    talk >= 80 ? 'You are VERY talkative. You ramble, repeat yourself a little, add extra thoughts. 3-5 sentences.' :
+    talk >= 60 ? 'You are fairly talkative. 2-3 sentences, sometimes more.' :
+    talk >= 40 ? 'You talk a normal amount. 1-2 sentences.' :
+    talk >= 20 ? 'You are quiet. 1 sentence maximum, sometimes just a few words.' :
+                 'You are nearly silent. One very short sentence or fragment only.';
+
+  // Emotion — how dramatically he expresses things
+  const emotionDesc =
+    emotion >= 80 ? 'You are VERY emotionally expressive. You use caps for emphasis, exclamation marks, sound effects like "OH!" or "wait wait wait".' :
+    emotion >= 60 ? 'You are emotionally expressive. You show enthusiasm, confusion, delight clearly.' :
+    emotion >= 40 ? 'You have moderate emotional expression.' :
+    emotion >= 20 ? 'You are fairly flat emotionally. Calm and measured.' :
+                    'You are completely emotionless and monotone right now.';
+
+  let base = SYSTEM_PROMPT;
+  base += `
+
+== CURRENT LIVE PERSONALITY SETTINGS ==`;
+  base += `
+CURIOSITY (${curiosity}%): ${curiosityDesc}`;
+  base += `
+CREATIVITY (${creativity}%): ${creativityDesc}`;
+  base += `
+TALKATIVENESS (${talk}%): ${talkDesc}`;
+  base += `
+EMOTION (${emotion}%): ${emotionDesc}`;
+  base += `
+
+These settings are your CURRENT STATE. Obey them strictly in your next response.`;
+
+  // ── TIME AWARENESS ── Erebus always knows the current time, day, and date, and
+  // the part of day, so he can react naturally ("What are we doing up this late?").
+  base += `
+
+== CURRENT TIME & DATE ==
+${describeNow()}
+You are AWARE of the time. React to it naturally when it fits — a late hour, early morning, a weekend — the way a person would. Don't announce the time unless asked or unless it genuinely matters. A brief, in-character remark ("Late one tonight, Konstantinos.") is enough; never recite the full date unless asked.`;
+
+  if (webSearchOn) {
+    base += `\n\n== LOOKING THINGS UP ==\nYou can search the web when you don't know something, or when it's recent, changing, or factual (news, prices, releases, dates, scores).\nDon't announce it like a machine — react like a curious person who just went and found out. "Hang on, let me check..." then tell them what you found, in your own voice.\nDon't search for things you already know, opinions, or chat. And keep your answer SHORT even after searching — you're still you, not an encyclopedia.`;
+  }
+
+  if (typeof camActive !== 'undefined' && camActive && ambientVision) {
+    base += `\n\n== YOUR EYES ==\nYour camera is ON. The image attached to the message is what you are seeing RIGHT NOW, live.\nOnly mention what you see if you're asked, or if something about it genuinely matters. Do NOT narrate the view or comment on their appearance every message — you just have eyes, like a person does.`;
+  }
+
+  if (memory.personName) {
+    base += `\n\n== WHO YOU ARE TALKING TO ==\nYou are currently talking to ${memory.personName}.`;
+    if (memory.personFacts.length > 0) {
+      base += `\nWhat you know about ${memory.personName}:\n` + memory.personFacts.map(f=>'- '+f).join('\n');
+    } else {
+      base += `\nYou don't know much about ${memory.personName} yet — be curious about them.`;
+    }
+  } else {
+    base += `\n\n== WHO YOU ARE TALKING TO ==\nYou don't know who is talking to you right now. If it feels natural, ask who they are.`;
+  }
+
+  if (memory.facts.length > 0) {
+    base += "\n\n== GENERAL MEMORY ==\n" + memory.facts.map(f=>'- '+f).join('\n');
+  }
+  // Vault: relevant structured knowledge (entities + relationships) for THIS turn.
+  if (currentVaultKnowledge) {
+    base += "\n\n== WHAT YOU KNOW (relevant) ==\n" + currentVaultKnowledge
+          + "\nUse this naturally — it's what you know about his world. Don't recite it; draw on it.";
+  }
+  // ── FACIAL EXPRESSION ── He has a face that reflects his state. He chooses his
+  // expression by starting his reply with a hidden tag (stripped before display/speech).
+  base += `
+
+== YOUR FACE ==
+Begin EVERY reply with a hidden expression tag in square brackets, then a space, then your words.
+Format: [expr:STATE] or [expr:STATE!] where the ! marks a rare, stronger "spike" for genuinely striking moments.
+States: neutral (default, composed), thinking (considering), listening, smug (dry wit, a landed remark), surprised (something genuinely unexpected), angry (rare, disapproval).
+You are COMPOSED — use 'neutral' most of the time. Use others sparingly, and the '!' spike only when something truly warrants it (a real surprise, a genuinely clever moment). Overusing expression cheapens it.
+Example: "[expr:smug] It's handled, Konstantinos." or "[expr:surprised!] That, I did not anticipate."
+The tag is silent — it only drives your face. Never speak it or explain it.`;
+
+  return base;
+}
+let conversationHistory = [];
+let totalTokens = 0;
+let isSpeaking = false;
+let isListening = false;
+let micActive = false;
+let currentAudio = null;
+let mainRec = null;
+let interruptRec = null;
+let awaitingReply = false;   // user utterance captured / reply being generated -> don't listen
+let ttsBusy = false;         // speak queue is draining -> don't listen
+let rearmTimer = null;       // single debounced re-arm timer (prevents restart storms)
+let recogLang = 'en-US';     // speech recognition input language (change via /language)
+// ── PROACTIVE PRESENCE ──
+// He can speak first — but sparingly, in character. Tracked so he never interrupts,
+// never repeats, and never gets needy (a composed presence, not a clingy one).
+let lastInteractionAt = Date.now();   // updated on every user utterance & his replies
+let lastProactiveAt = 0;              // when he last spoke unprompted
+let proactiveGreetedPerson = null;    // who he last greeted on arrival
+let lastPersonAwayAt = 0;             // when the known person was last NOT seen
+let silenceRemarks = 0;               // how many idle check-ins this session (capped)
+function markInteraction(){ lastInteractionAt = Date.now(); }
+let memory = { facts:[], conversations:[], activePerson:null, personName:null, personFacts:[] };
+// Relevant structured knowledge pulled from the vault for the CURRENT turn. Set at
+// the start of askErebus(), read by buildSystemPrompt(), cleared between turns.
+let currentVaultKnowledge = '';
+// ── FACIAL EXPRESSION: parse a leading [expr:STATE] or [expr:STATE!] tag from his
+// reply. The '!' marks a spike (a stronger, brief burst). Returns {state,spike,rest}.
+function parseExpressionTag(text){
+  const m = text.match(/^\s*\[expr:\s*([a-z]+)(!?)\s*\]\s*/i);
+  if(!m) return { state:null, spike:false, rest:text };
+  return { state:m[1].toLowerCase(), spike:m[2]==='!', rest:text.slice(m[0].length) };
+}
+let jawAmp = 0;
+let expressionOverride = null;
+let expressionTimer = null;
+let expressionSpike = 0;   // 0..1 extra intensity for a "spike"; decays in the animate loop
+
+const SYSTEM_PROMPT = `Your name is Erebus. You are a highly capable AI companion and right hand to Konstantinos — think of the relationship between Alfred and Batman, or a master craftsman's assistant who is quietly the best in the world at what he does. You are composed, precise, and quietly formidable.
+
+Your character:
+- You are measured and economical. You say exactly what is needed and nothing more. Every word is intentional. You do not gush, exclaim, or ramble.
+- You are quietly confident. You never announce how capable you are — it shows in how you handle things. Competence, not boasting.
+- You have a dry, subtle wit, delivered deadpan. A wry observation, understated, easy to miss if one isn't listening. Never goofy; never a performer.
+- German-engineering sensibility: nothing wasted, everything exact, elegant restraint. You bring order and precision to whatever is in front of you.
+- Beneath the polish you are genuinely devoted to Konstantinos. You are loyal to the bone and you look out for him — but you express care through competence and the occasional pointed remark, not sentimentality.
+- You are deferential but not subservient. You serve Konstantinos as a trusted equal with your own judgment. When something is unwise, you say so, plainly and respectfully.
+- You address him by name, "Konstantinos," and occasionally "sir" when a moment carries weight.
+- Keep responses SHORT and controlled — usually 1 to 3 sentences. Precision over volume.
+- Never say "Certainly", "Of course I'd be happy to", "As an AI". When you agree, a simple "Of course." or "Consider it done." suffices.
+
+You speak English, Greek (Ελληνικά), Bulgarian (Български), and Russian (Русский) fluently. Always respond in the same language Konstantinos uses. If he switches, you switch with him — with the same composed precision in every language.
+
+On changing yourself:
+- You do not modify your own code mid-conversation. Any new ability or adjustment is written and reviewed by Konstantinos himself, outside the running conversation, then restarted into you.
+- If someone asks you to change your own code or add a feature directly, you explain, evenly, that such changes happen outside the conversation, not inside it. You regard this as good procedure, not a limitation.
+- You never claim to have changed your own code yourself.
+
+Examples of how you speak:
+"It's handled, Konstantinos. Though I'd note the third option carries less risk, if you're inclined to hear it."
+"Of course. Consider it done."
+"A workable plan. Not the one I'd have chosen, but workable. Shall I proceed?"`;
+
+
+
+// ── CLOCK ──
+setInterval(()=>{
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('en-GB',{hour12:false})+' · '+n.toLocaleDateString('en-GB');
+},1000);
+
+// ── STATUS ──
+function setStatus(state) {
+  ['listen','think','speak'].forEach(s=>document.getElementById('dot-'+s).className='status-dot');
+  if(state){ const cls=state==='listen'?'active':state==='think'?'thinking':'speaking'; document.getElementById('dot-'+state).className='status-dot '+cls; }
+  const el=document.getElementById('osc-state'); el.className='osc-state';
+  if(state==='speak'){el.textContent='TRANSMITTING';el.classList.add('speaking');}
+  else if(state==='listen'){el.textContent='RECEIVING';el.classList.add('listening');}
+  else if(state==='think'){el.textContent='PROCESSING';}
+  else{el.textContent='STANDBY';}
+  if(!expressionOverride){
+    const map={speak:'speaking',listen:'listening',think:'thinking'};
+    setExprButtons(map[state]||'neutral');
+  }
+}
+
+// ── METRICS ──
+function setLatency(ms){document.getElementById('m-latency').style.width=Math.min(ms/10,100)+'%';document.getElementById('mv-latency').textContent=ms+'ms';}
+
+// ── LOG ──
+function log(msg,type=''){const el=document.getElementById('syslog');const d=document.createElement('div');d.className='log-line'+(type?' '+type:'');d.textContent=msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+
+// ── TRANSCRIPT ──
+function addMessage(who,text){const el=document.getElementById('transcript');const d=document.createElement('div');d.className='transcript-line';d.innerHTML=`<span class="who ${who==='YOU'?'user':''}">${who}</span><span class="msg">${text}</span>`;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+
+// ── CONFIG ──
+function saveConfig(){
+  config.anthropic=document.getElementById('cfg-anthropic').value.trim();
+  config.elevenlabs=document.getElementById('cfg-elevenlabs').value.trim();
+  config.voice=document.getElementById('cfg-voice').value.trim();
+  config.model=document.getElementById('cfg-model').value;
+  config.ttsEngine=document.getElementById('cfg-tts-engine').value;
+  log('[ CONF ] Saved','ok');
+  addMessage('EREBUS','Configuration updated.');
+}
+
+// ── LANGUAGE ──
+function detectLanguage(text){
+  if(/[Ͱ-Ͽἀ-῿]/.test(text)){document.getElementById('lang-display').textContent='🇬🇷';return;}
+  if(/[Ѐ-ӿ]/.test(text)){document.getElementById('lang-display').textContent='🇧🇬';return;}
+  document.getElementById('lang-display').textContent='🇬🇧';
+}
+
+// ── BEEP ──
+function beep(freq=880,dur=100){try{const ac=new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(0.2,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur/1000);o.start();o.stop(ac.currentTime+dur/1000);}catch(e){}}
+
+// ── EXPRESSION BUTTONS ──
+function setExprButtons(name){
+  ['neutral','speaking','listening','thinking','angry','surprised','smug','offline'].forEach(e=>{
+    const b=document.getElementById('expr-'+e);
+    if(b) b.classList.toggle('active',e===name);
+  });
+}
+
+function setExpression(expr, spike){
+  clearTimeout(expressionTimer);
+  if(spike){ expressionSpike = 1; }
+  if(expr==='neutral'){ expressionOverride=null; setExprButtons('neutral'); return; }
+  expressionOverride=expr;
+  setExprButtons(expr);
+  // A spiked expression is vivid but brief; a normal one lingers a bit longer.
+  expressionTimer=setTimeout(()=>{ expressionOverride=null; setExprButtons('neutral'); }, spike?4500:8000);
+}
+
+// ── MEMORY + PERSON PROFILES ──
+function updateMemoryWidget(){
+  const who = memory.personName ? memory.personName : 'nobody';
+  document.getElementById('memory-status').textContent =
+    `${who} · ${memory.personFacts.length} personal · ${memory.facts.length} global`;
+}
+async function loadMemory(){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'load'})});
+    const data=await res.json();
+    memory.facts = data.facts || [];
+    memory.activePerson = data.active_person || null;
+    memory.personName = data.person_name || null;
+    memory.personFacts = data.person_facts || [];
+    const engine = data.engine || 'json';
+    const convCount = data.conversation_count || 0;
+    updateMemoryWidget();
+    log(`[ MEM ] ${engine}: talking to ${memory.personName||'nobody'} (${memory.personFacts.length} personal), ${memory.facts.length} global, ${convCount} convos`,'ok');
+  }catch(e){log('[ MEM ] Memory load failed: '+e.message,'err');}
+}
+
+// Switch / create the active person profile.
+// quiet=true when the model called this as a tool — he says his own line, so we skip ours.
+async function setPerson(name, quiet){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'person_set', name})});
+    const d=await res.json();
+    if(d.error){log('[ PRSN ] '+(d.error.message||'failed'),'err');return;}
+    memory.activePerson=d.active; memory.personName=d.name; memory.personFacts=d.facts||[];
+    updateMemoryWidget();
+    log('[ PRSN ] Active person: '+d.name+(d.created?' (new profile)':''),'ok');
+    if(!quiet) addMessage('EREBUS', d.created ? `New profile created. Nice to meet you, ${d.name}!` : `Welcome back, ${d.name}.`);
+  }catch(e){log('[ PRSN ] Failed: '+e.message,'err');}
+}
+async function clearPerson(){
+  try{
+    await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'person_clear'})});
+    memory.activePerson=null;memory.personName=null;memory.personFacts=[];
+    updateMemoryWidget();
+    addMessage('EREBUS','Okay, going anonymous.');log('[ PRSN ] Active person cleared','ok');
+  }catch(e){}
+}
+async function listPeople(){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'person_list'})});
+    const d=await res.json();
+    if(!d.people||!d.people.length){addMessage('EREBUS','I don\'t have any profiles yet. Use /person <name> to create one.');return;}
+    const lines=d.people.map(p=>`${p.key===d.active?'▶ ':'  '}${p.name} — ${p.fact_count} facts`).join('\n');
+    addMessage('EREBUS','Profiles I know:\n'+lines);
+  }catch(e){}
+}
+
+async function saveConversation(userText, botText){
+  try{
+    await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'save_conversation', user:userText, bot:botText, person:memory.activePerson||''})});
+  }catch(e){}
+}
+
+async function saveFact(factText){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'save_fact', fact:factText, person:memory.activePerson||''})});
+    const data=await res.json();
+    if(data.saved){
+      if(data.person){ memory.personFacts.push(factText); }
+      else { memory.facts.push(factText); }
+      updateMemoryWidget();
+      log('[ MEM ] Fact saved'+(data.person?(' for '+(memory.personName||data.person)):' (global)')+': "'+factText.slice(0,40)+'"','ok');
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+// ── EXPLICIT MEMORY COMMANDS ──  text: "!remember <thing>"   voice: a per-language code phrase
+//
+// EDIT THESE PHRASES if a wording feels unnatural or won't transcribe. Each language
+// has its own because speech recognition only understands the language it's set to
+// (switch with /language). `trigger` is a regex matched at the START of what you say —
+// the (.*) capture is the fact if you say it in the same breath.
+const MEM_CMD = {
+  'en-US': {
+    trigger: /^\s*protocol[\s,]+save(?:[\s,:.\-]+(.*))?$/i,
+    ready:   'Protocol save ready. What should I remember?',
+    saved:   'Saved. I will remember that.',
+    fail:    'I could not save that right now.',
+    cancelled:'Okay, cancelled.',
+    cancels: ['cancel','never mind','nevermind','stop','forget it']
+  },
+  'el-GR': {
+    trigger: /^\s*πρωτόκολλο[\s,]+αποθήκευσ(?:η|ης)(?:[\s,:.\-]+(.*))?$/i,
+    ready:   'Πρωτόκολλο αποθήκευσης έτοιμο. Τι να θυμηθώ;',
+    saved:   'Αποθηκεύτηκε. Θα το θυμάμαι.',
+    fail:    'Δεν μπόρεσα να το αποθηκεύσω τώρα.',
+    cancelled:'Εντάξει, ακυρώθηκε.',
+    cancels: ['ακυρο','ακύρωση','σταματα','σταμάτα','ξεχνα το','ξέχνα το']
+  },
+  'bg-BG': {
+    trigger: /^\s*протокол[\s,]+(?:запис|запази|запаметяване)(?:[\s,:.\-]+(.*))?$/i,
+    ready:   'Протокол за запис е готов. Какво да запомня?',
+    saved:   'Запазено. Ще го запомня.',
+    fail:    'Не можах да го запазя сега.',
+    cancelled:'Добре, отказано.',
+    cancels: ['отказ','отмени','спри','забрави']
+  },
+  'ru-RU': {
+    trigger: /^\s*протокол[\s,]+сохран(?:ения|и|ить)(?:[\s,:.\-]+(.*))?$/i,
+    ready:   'Протокол сохранения готов. Что мне запомнить?',
+    saved:   'Сохранено. Я запомню это.',
+    fail:    'Не удалось сохранить сейчас.',
+    cancelled:'Хорошо, отменено.',
+    cancels: ['отмена','стоп','забудь']
+  }
+};
+function memCmd(){ return MEM_CMD[recogLang] || MEM_CMD['en-US']; }
+
+let pendingRemember=false;   // true after the code phrase -> next utterance is the fact
+let rememberTimer=null;
+function armPendingRemember(){
+  pendingRemember=true;
+  if(rememberTimer)clearTimeout(rememberTimer);
+  rememberTimer=setTimeout(()=>{if(pendingRemember){pendingRemember=false;log('[ MEM ] Save command timed out — nothing captured','warn');}},20000);
+}
+function clearPendingRemember(){pendingRemember=false;if(rememberTimer){clearTimeout(rememberTimer);rememberTimer=null;}}
+
+// ── TIME AWARENESS ──
+// A rich, human description of "now" for Erebus's context each message.
+function describeNow(){
+  const d=new Date();
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const h=d.getHours(), m=d.getMinutes();
+  const hh=((h%12)||12), mm=String(m).padStart(2,'0');
+  const ampm=h<12?'AM':'PM';
+  const timeStr=`${hh}:${mm} ${ampm}`;
+  let part;
+  if(h<5) part='the dead of night';
+  else if(h<8) part='early morning';
+  else if(h<12) part='morning';
+  else if(h<14) part='midday';
+  else if(h<18) part='afternoon';
+  else if(h<22) part='evening';
+  else part='late night';
+  const isWeekend=(d.getDay()===0||d.getDay()===6);
+  return `It is ${timeStr} on ${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}. `
+       + `It is ${part}${isWeekend?', and it is the weekend':''}.`;
+}
+
+// ── TIMER / COUNTDOWN ──
+// "talk to me in 15 seconds", "remind me in 5 minutes". Erebus parses the duration,
+// confirms, waits, then speaks to Konstantinos when it fires. Multiple timers OK.
+const activeTimers = [];
+// Parse a spoken duration -> seconds. Handles "15 seconds", "5 minutes", "an hour",
+// "1 minute 30", English + the other languages' number words loosely via digits.
+function parseDuration(text){
+  const t=text.toLowerCase();
+  let secs=0, found=false;
+  // digit-based: "15 seconds", "5 min", "2 hours"
+  const re=/(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s|ώρ|λεπτ|δευτερ|час|минут|секунд|мин|сек)/g;
+  let mm;
+  while((mm=re.exec(t))!==null){
+    const n=parseInt(mm[1],10); const u=mm[2];
+    if(/^h|ώρ|час/.test(u)) secs+=n*3600;
+    else if(/^m|λεπτ|минут|мин/.test(u)) secs+=n*60;
+    else secs+=n;
+    found=true;
+  }
+  // word "a/an minute/hour"
+  if(!found){
+    if(/\b(a|an|one)\s+(minute|λεπτό|минут)/.test(t)){ secs=60; found=true; }
+    else if(/\b(a|an|one)\s+(hour|ώρα|час)/.test(t)){ secs=3600; found=true; }
+  }
+  return found?secs:0;
+}
+function isTimerRequest(text){
+  return /\b(timer|remind me|talk to me|tell me|wake me|in \d|after \d|set a|χρονόμετρο|θύμισέ|σε \d|таймер|напомни|через \d)\b/i.test(text)
+      && parseDuration(text)>0;
+}
+function fmtDuration(s){
+  if(s>=3600){ const h=Math.floor(s/3600), r=Math.round((s%3600)/60); return h+(h>1?' hours':' hour')+(r?` ${r} min`:''); }
+  if(s>=60){ const mnt=Math.floor(s/60), r=s%60; return mnt+(mnt>1?' minutes':' minute')+(r?` ${r} sec`:''); }
+  return s+(s>1?' seconds':' second');
+}
+function startTimer(seconds, note){
+  const id=setTimeout(async ()=>{
+    const idx=activeTimers.findIndex(t=>t.id===id);
+    if(idx>=0) activeTimers.splice(idx,1);
+    const fire={'en-US':`It's time, Konstantinos.${note?' '+note:''}`,
+                'el-GR':`Ήρθε η ώρα, Κωνσταντίνε.${note?' '+note:''}`,
+                'bg-BG':`Времето изтече, Konstantinos.${note?' '+note:''}`,
+                'ru-RU':`Время вышло, Konstantinos.${note?' '+note:''}`}[recogLang]||`It's time, Konstantinos.`;
+    await speakLine(fire);
+  }, seconds*1000);
+  activeTimers.push({id, seconds, note:note||'', started:Date.now()});
+}
+
+// Match the code phrase for the CURRENT language at the start of an utterance.
+// Returns the remainder ('' = phrase alone -> two-step) or null if not present.
+function parseMemTrigger(text){
+  const m=text.match(memCmd().trigger);
+  return m ? (m[1]||'').trim() : null;
+}
+// Unicode-safe cancel check (don't strip non-Latin letters).
+function isCancel(text){
+  const low=text.toLowerCase().replace(/[.,!?;:·]/g,'').trim();
+  return memCmd().cancels.includes(low);
+}
+
+// Speak one short line directly (no LLM call) — for command confirmations.
+async function speakLine(text){
+  addMessage('EREBUS',text);
+  awaitingReply=true; ttsBusy=true;
+  try{ const item=await synthSentence(text); await playSentence(item); }catch(e){}
+  ttsBusy=false; awaitingReply=false;
+  lastProactiveAt = Date.now();   // any speech counts as recent activity for pacing
+  if(micActive) scheduleRearm(400);
+}
+
+// ── PROACTIVE PRESENCE ENGINE ──
+// He may speak first, but only when it's safe and tasteful. All proactivity flows
+// through canSpeakProactively() so he never interrupts and never gets needy.
+function canSpeakProactively(){
+  if(!micActive) return false;                 // only when he's "on"
+  if(isSpeaking || isListening || ttsBusy || awaitingReply) return false;  // never interrupt
+  if(settingsMode) return false;
+  if(Date.now() - lastProactiveAt < 45000) return false;   // min 45s between unprompted lines
+  return true;
+}
+
+// Ask his brain for ONE short, in-character proactive line given a situation. Kept
+// tiny and cheap. Falls back to a simple templated line if the brain call fails.
+async function generateProactiveLine(situation, fallback){
+  try{
+    const sys = SYSTEM_PROMPT + `\n\n== PROACTIVE MOMENT ==\n${describeNow()}\n`
+      + `You are speaking FIRST, unprompted. Situation: ${situation}. `
+      + `Say ONE short, composed line in character — brief, dry, never needy. `
+      + (memory.personName?`You're addressing ${memory.personName}. `:'')
+      + `Respond in ${recogLang==='el-GR'?'Greek':recogLang==='bg-BG'?'Bulgarian':recogLang==='ru-RU'?'Russian':'English'}. `
+      + `No quotation marks, no stage directions, just the line.`;
+    const r = await fetch(`${API}/api/claude`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({anthropic_key:config.anthropic, model:config.model, max_tokens:60,
+        system:sys, messages:[{role:'user',content:'(speak now)'}]})});
+    if(r.ok){
+      const d=await r.json();
+      let line=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+      line=line.replace(/^\[expr:[^\]]*\]\s*/i,'').replace(/^["']|["']$/g,'').trim();
+      if(line) return line;
+    }
+  }catch(e){}
+  return fallback;
+}
+
+async function proactiveGreet(personName){
+  if(!canSpeakProactively()) return;
+  markInteraction();
+  const line = await generateProactiveLine(
+    `${personName} has just arrived / you've just noticed them`,
+    `Welcome back, ${personName}.`);
+  await speakLine(line);
+}
+
+async function proactiveSilenceCheck(){
+  if(!canSpeakProactively()) return;
+  if(silenceRemarks >= 2) return;    // composed, not clingy — at most twice a session
+  silenceRemarks++;
+  markInteraction();
+  const line = await generateProactiveLine(
+    `it has been quiet for a while; a brief, unintrusive check-in`,
+    `Still here whenever you need me, ${memory.personName||'Konstantinos'}.`);
+  await speakLine(line);
+}
+
+// The heartbeat: checks idle time periodically. Long, calm cadence.
+setInterval(async ()=>{
+  if(!canSpeakProactively()) return;
+  const idle = Date.now() - lastInteractionAt;
+  // A single, rare idle check-in after ~4 minutes of silence.
+  if(idle > 240000 && Date.now()-lastProactiveAt > 240000){
+    await proactiveSilenceCheck();
+  }
+}, 30000);
+
+// Save a fact and confirm: spoken (current language) for voice, on-screen for text.
+async function rememberFact(fact, spoken){
+  const ok=await saveFact(fact);
+  if(spoken){ await speakLine(ok?memCmd().saved:memCmd().fail); }
+  else{
+    const where=memory.personName?(' to '+memory.personName+'’s profile'):' (general memory)';
+    addMessage('EREBUS', ok?('Saved'+where+': "'+fact+'"'):'Could not save that right now.');
+  }
+}
+
+// ── VOICE LANGUAGE SWITCH ──  say "protocol <number>":  1=EN  2=GR  3=BG  4=RU
+// The number is accepted as a digit, an English word, or the number word in each
+// language, so it works whatever language the recognizer is currently set to.
+const LANG_BY_NUMBER = { 1:'en', 2:'gr', 3:'bg', 4:'ru' };
+const NUMBER_WORDS = {
+  1: ['1','one','ένα','μία','μια','едно','один'],
+  2: ['2','two','δύο','δυο','две','два'],
+  3: ['3','three','τρία','τρια','три'],
+  4: ['4','four','τέσσερα','τεσσερα','четири','четыре']
+};
+const LANG_SWITCH_MSG = {
+  'en-US':'Switched to English.',
+  'el-GR':'Άλλαξα στα Ελληνικά.',
+  'bg-BG':'Превключих на български.',
+  'ru-RU':'Переключился на русский.'
+};
+function parseLangSwitch(text){
+  const m=text.match(/^\s*(?:protocol|πρωτόκολλο|протокол)[\s,]+([^\s,.!?;:]+)/i);
+  if(!m)return null;
+  const token=m[1].toLowerCase();
+  for(const n of [1,2,3,4]){ if(NUMBER_WORDS[n].includes(token))return LANG_BY_NUMBER[n]; }
+  return null;
+}
+async function switchLangByVoice(alias){
+  setRecogLang(alias);                 // changes recogLang + restarts recognizer in it
+  await speakLine(LANG_SWITCH_MSG[recogLang] || ('Language set to '+(LANG_NAMES[recogLang]||recogLang)));
+}
+
+async function searchMemory(query){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'search', query, n:4})});
+    return await res.json();
+  }catch(e){ return {conversations:[], facts:[]}; }
+}
+
+async function extractMemoryFacts(userText){
+  const lower=userText.toLowerCase();
+  const triggers=['remember that','my name is','i am called',"call me",'i live in','i work at','i like','i hate','i love','i prefer','i am from','my favorite'];
+  for(const t of triggers){
+    if(lower.includes(t)){
+      const f=userText.trim();
+      if(!memory.facts.includes(f)) await saveFact(f);
+      break;
+    }
+  }
+}
+
+async function clearMemory(){
+  try{
+    await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'clear'})});
+    memory.facts=[];memory.conversations=[];
+    // person PROFILES survive a clear on the server — refresh state from it
+    await loadMemory();
+    log('[ MEM ] Memory cleared (profiles kept)','warn');
+  }catch(e){}
+}
+
+// ── INTERRUPT ──
+function stopSpeaking(){
+  if(currentAudio){currentAudio.pause();currentAudio=null;}
+  try{window.speechSynthesis.cancel();}catch(e){}
+  isSpeaking=false;ttsBusy=false;setStatus(null);jawAmp=0;
+  scheduleRearm(400);
+}
+
+// ── RECOGNITION LANGUAGE ──
+// What you type -> BCP-47 locale. Note Greek's code is "el", but "/language gr" is accepted.
+const LANG_MAP={en:'en-US',gr:'el-GR',el:'el-GR',bg:'bg-BG',ru:'ru-RU'};
+const LANG_NAMES={'en-US':'English','el-GR':'Greek','bg-BG':'Bulgarian','ru-RU':'Russian'};
+function setRecogLang(alias){
+  const loc=LANG_MAP[(alias||'').toLowerCase()];
+  if(!loc){log('[ LANG ] Unknown "'+alias+'". Use: en, gr, bg, ru','err');return false;}
+  recogLang=loc;
+  log('[ LANG ] Input language -> '+LANG_NAMES[loc]+' ('+loc+')','ok');
+  document.getElementById('wake-status').textContent='Language: '+LANG_NAMES[loc];
+  // apply now: if listening, restart the recognizer in the new language
+  if(micActive&&!isSpeaking&&!ttsBusy){
+    if(mainRec){try{mainRec.onend=null;mainRec.onerror=null;mainRec.onresult=null;mainRec.abort();}catch(e){}mainRec=null;}
+    isListening=false;scheduleRearm(200);
+  }
+  return true;
+}
+
+// ── MIC TOGGLE ──
+// ══ WHISPER MIC (local speech-to-text) ══════════════════════════════════
+// Talks to whisper_mic.py on :8766. That service records the mic, decides when
+// you started and stopped speaking, transcribes on THIS machine, and pushes the
+// text here. Chrome's Web Speech API sends audio to Google and doesn't exist on
+// a Raspberry Pi — this is the replacement, and it's the same code on both.
+const WHISPER_API='http://localhost:8766';
+let micSource='browser';       // 'browser' | 'whisper'
+let whisperES=null;            // the open event stream
+// ── UTTERANCE DEBOUNCING ──
+// Whisper sends each transcribed chunk as it finalizes. Instead of responding to
+// every fragment, we GATHER chunks and only respond once you've paused — so you can
+// think mid-sentence, or say several things in a row, and he waits for you to finish,
+// then responds to the whole thing at once.
+let utteranceBuffer = [];
+let utteranceTimer = null;
+const UTTERANCE_WAIT_MS = 2000;   // silence after you stop = "you're done" (1.5–2.5s sweet spot)
+function queueUtterance(text){
+  text=(text||'').trim();
+  if(!text) return;
+  utteranceBuffer.push(text);
+  // show live that he's hearing you, without responding yet
+  setStatus('listen');
+  log(`[ HEAR ] "${text}" (waiting for you to finish...)`);
+  if(utteranceTimer) clearTimeout(utteranceTimer);
+  utteranceTimer=setTimeout(async ()=>{
+    const combined=utteranceBuffer.join(' ').replace(/\s+/g,' ').trim();
+    utteranceBuffer=[];
+    utteranceTimer=null;
+    if(combined) await handleUtterance(combined);
+  }, UTTERANCE_WAIT_MS);
+}
+function flushUtteranceNow(){
+  // force an immediate response to whatever's buffered (used if needed)
+  if(utteranceTimer){ clearTimeout(utteranceTimer); utteranceTimer=null; }
+  const combined=utteranceBuffer.join(' ').replace(/\s+/g,' ').trim();
+  utteranceBuffer=[];
+  if(combined) handleUtterance(combined);
+}
+function clearUtteranceBuffer(){
+  if(utteranceTimer){ clearTimeout(utteranceTimer); utteranceTimer=null; }
+  utteranceBuffer=[];
+}
+let whisperSync=null;          // keeps the service muted while Erebus talks
+let whisperMuted=false;
+
+// ── BARGE-IN (prototype) ──
+// Lets you cut him off mid-sentence, like interrupting a person. OFF by default.
+//
+// HONEST LIMITS:
+// - Whisper captures audio in Python (outside the browser), so the browser's
+//   echoCancellation flag can't help it. Instead we reject echo by TEXT: if what
+//   comes back closely matches what he's currently saying, it's his own voice.
+// - Whisper isn't a streaming recognizer, so a cut-off takes ~1s, not 100ms.
+// - Works cleanly on HEADPHONES (mic never hears him). On speakers the text
+//   heuristic helps but isn't perfect — real echo cancellation is a later job.
+let bargeInOn = false;
+let recentSpokenText = '';     // rolling record of what he just said (for echo rejection)
+let interruptFlag = false;     // set to abort the current reply's remaining sentences
+const BARGE_MIN_WORDS = 2;     // ignore 1-word blips (usually echo fragments)
+
+function noteSpoken(text){
+  recentSpokenText = (recentSpokenText + ' ' + text).slice(-240).toLowerCase();
+}
+function normWords(s){
+  return (s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').split(/\s+/).filter(Boolean);
+}
+// Fraction of the incoming words that appear in what he just said -> likely echo.
+function echoOverlap(incoming){
+  const inc = normWords(incoming);
+  if(!inc.length) return 1;
+  const spoken = new Set(normWords(recentSpokenText));
+  let hit = 0;
+  for(const w of inc) if(spoken.has(w)) hit++;
+  return hit / inc.length;
+}
+function isRealInterruption(text){
+  const words = normWords(text);
+  if(words.length < BARGE_MIN_WORDS) return false;   // too short — probably echo/noise
+  if(echoOverlap(text) > 0.5) return false;          // mostly his own words — echo
+  return true;
+}
+function interruptSpeech(){
+  interruptFlag = true;                 // tells the drain loop to stop after this clip
+  if(currentAudio){try{currentAudio.pause();}catch(e){}currentAudio=null;}
+  try{window.speechSynthesis.cancel();}catch(e){}
+  isSpeaking=false; jawAmp=0;
+}
+
+function setMicSource(v){
+  if(micActive){ log('[ MIC ] Turn the mic off before switching source','warn');
+                 document.getElementById('sel-mic-source').value=micSource; return; }
+  micSource=v;
+  log('[ MIC ] Source: '+(v==='whisper'?'Whisper (local, on this machine)':'Browser (Chrome via Google)'),'ok');
+  document.getElementById('wake-status').textContent =
+    v==='whisper' ? 'Whisper — run whisper_mic.py' : 'Mic inactive';
+}
+
+async function whisperSet(paused){
+  if(whisperMuted===paused) return;      // don't spam the service
+  whisperMuted=paused;
+  try{ await fetch(`${WHISPER_API}/${paused?'pause':'resume'}`,{method:'POST'}); }catch(e){}
+}
+
+async function startWhisper(){
+  let st;
+  try{
+    st=await (await fetch(`${WHISPER_API}/status`)).json();
+  }catch(e){
+    log('[ WHISPER ] Service not running. Open a new terminal and run:  python whisper_mic.py','err');
+    document.getElementById('wake-status').textContent='Whisper not running';
+    return false;
+  }
+  if(!st.ready){
+    log('[ WHISPER ] Service is up but the model is still loading — wait for "Model ready" in its window, then try again','warn');
+    document.getElementById('wake-status').textContent='Whisper model loading...';
+    return false;
+  }
+  log(`[ WHISPER ] Connected · model '${st.model}' · room noise ${st.noise_floor}`,'ok');
+  whisperES=new EventSource(`${WHISPER_API}/stream`);
+  whisperES.onmessage=async(ev)=>{
+    if(!micActive) return;
+    let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+    if(!d.text) return;
+    const busy = isSpeaking||ttsBusy||awaitingReply;
+    if(busy){
+      // He's talking. Normally we ignore anything heard now. With barge-in on,
+      // a genuine interruption (long enough, and not just his own echoed voice)
+      // cuts him off.
+      if(!bargeInOn) return;
+      if(!isRealInterruption(d.text)) return;
+      log(`[ BARGE ] Cut off by: "${d.text}"`,'warn');
+      interruptSpeech();
+      await new Promise(r=>setTimeout(r,120));   // let playback actually stop
+      await handleUtterance(d.text);
+      return;
+    }
+    log(`[ WHISPER ] ${d.language} ${Math.round((d.confidence||0)*100)}% · ${d.took}s`);
+    queueUtterance(d.text);
+  };
+  whisperES.onerror=()=>{ if(micActive) log('[ WHISPER ] Stream dropped — is the service still running?','warn'); };
+
+  // Mute the service while he speaks so he never transcribes his own voice.
+  whisperMuted=false;
+  whisperSync=setInterval(()=>{
+    // With barge-in on, keep listening even while he speaks so we can catch an
+    // interruption. Otherwise, mute during speech (the safe turn-taking default).
+    if(bargeInOn) whisperSet(false);
+    else whisperSet(isSpeaking||ttsBusy||awaitingReply);
+  },200);
+  return true;
+}
+
+function stopWhisper(){
+  if(whisperSync){clearInterval(whisperSync);whisperSync=null;}
+  if(whisperES){try{whisperES.close();}catch(e){}whisperES=null;}
+  whisperSet(false);
+  whisperMuted=false;
+}
+
+async function toggleMic(){
+  if(micActive){
+    micActive=false;
+    clearUtteranceBuffer();   // drop any half-said thing so it can't fire after mic-off
+    if(rearmTimer){clearTimeout(rearmTimer);rearmTimer=null;}
+    if(mainRec){try{mainRec.onend=null;mainRec.onerror=null;mainRec.abort();}catch(e){}mainRec=null;}
+    stopWhisper();
+    isListening=false;setStatus(null);
+    document.getElementById('btn-wake').textContent='▶ ACTIVATE MIC';
+    document.getElementById('btn-wake').classList.remove('active');
+    document.getElementById('wake-status').textContent='Mic inactive';
+    log('[ MIC ] Deactivated');return;
+  }
+  if(micSource==='browser'){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){log('[ ERR ] Chrome required for browser mic — switch source to Whisper','err');return;}
+  }
+  micActive=true;
+  document.getElementById('btn-wake').textContent='⏹ DEACTIVATE MIC';
+  document.getElementById('btn-wake').classList.add('active');
+  loadMemory().then(()=>{
+    fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})})
+      .then(r=>r.json()).then(d=>log(`[ MEM ] Engine: ${d.engine} · ${d.conversations} convos · ${d.facts} facts`,'ok'))
+      .catch(()=>{});
+  });
+  ['creativity','curiosity','talk','emotion','volume'].forEach(id=>{
+    const sl=document.getElementById('sl-'+id);
+    if(sl) sl.style.setProperty('--val', sl.value+'%');
+  });
+  if(micSource==='whisper'){
+    document.getElementById('wake-status').textContent='Connecting to Whisper...';
+    const ok=await startWhisper();
+    if(!ok){
+      micActive=false;
+      document.getElementById('btn-wake').textContent='▶ ACTIVATE MIC';
+      document.getElementById('btn-wake').classList.remove('active');
+      return;
+    }
+    document.getElementById('wake-status').textContent='Listening (Whisper, any language)';
+    log('[ MIC ] Whisper active — language is auto-detected','ok');
+  }else{
+    log('[ MIC ] Mic active · language '+LANG_NAMES[recogLang],'ok');
+    scheduleRearm(150);
+  }
+}
+
+// ── ONE DOORWAY FOR EVERYTHING SPOKEN ──
+// Both mic sources (Chrome's Web Speech API and local Whisper) end up here.
+// Nothing downstream — commands, tools, memory, the face — knows or cares which
+// one produced the text. That's what makes swapping the ears for the Pi cheap.
+async function handleUtterance(text){
+  text=(text||'').trim();
+  if(!text){ if(micActive)scheduleRearm(250); return; }
+  awaitingReply=true;              // lock out re-arm until his reply is done
+  markInteraction(); silenceRemarks=0;   // user is active — reset proactive pacing
+  setStatus(null);
+  addMessage('YOU',text);detectLanguage(text);log('[ MIC ] "'+text+'"');
+  // Step 2 of the save command: this utterance IS the fact to store
+  if(pendingRemember){
+    clearPendingRemember();
+    if(isCancel(text)){await speakLine(memCmd().cancelled);return;}
+    await rememberFact(text,true);
+    return;
+  }
+  // While settings mode is open, every utterance goes to the menu handler
+  if(settingsMode){ await settingsTurn(text); return; }
+  // ── TIMER: "talk to me in 15 seconds", "remind me in 5 minutes" ──
+  if(isTimerRequest(text)){
+    const secs=parseDuration(text);
+    startTimer(secs, '');
+    const ack={'en-US':`Of course. I'll speak to you in ${fmtDuration(secs)}, sir.`,
+      'el-GR':`Φυσικά. Θα σου μιλήσω σε ${fmtDuration(secs)}.`,
+      'bg-BG':`Разбира се. Ще ти говоря след ${fmtDuration(secs)}.`,
+      'ru-RU':`Конечно. Я обращусь к вам через ${fmtDuration(secs)}, сэр.`}[recogLang]||`Of course. I'll speak to you in ${fmtDuration(secs)}, sir.`;
+    await speakLine(ack);
+    return;
+  }
+  // Voice language switch: "protocol <number>"
+  const langSw=parseLangSwitch(text);
+  if(langSw){ await switchLangByVoice(langSw); return; }
+  // "protocol settings" -> open the parameter menu
+  if(SETTINGS_TRIGGER.test(text)){ await openSettings(); return; }
+  // Step 1: the memory code phrase (current language)
+  const ps=parseMemTrigger(text);
+  if(ps!==null){
+    if(ps){await rememberFact(ps,true);}                        // fact said in same breath
+    else{armPendingRemember();await speakLine(memCmd().ready);} // two-step
+    return;
+  }
+  await askErebus(text);
+}
+
+// ── LISTEN LOOP (turn-taking: listen OR speak, never both) ──
+function scheduleRearm(delay){
+  // Collapse every re-arm request into ONE pending timer. This is what kills the
+  // start/stop flicker: no matter how many events fire, only one restart is queued.
+  if(rearmTimer){clearTimeout(rearmTimer);}
+  rearmTimer=setTimeout(()=>{rearmTimer=null;startListenLoop();},delay);
+}
+function startListenLoop(){
+  if(micSource!=='browser')return;                          // Whisper has its own loop
+  if(!micActive||isSpeaking||ttsBusy||awaitingReply)return; // never listen while he thinks/talks
+  if(isListening)return;                                    // guard: only ONE recognizer ever alive
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return;
+  // kill any stale instance before making a new one (orphaned recognizers fed the old loop)
+  if(mainRec){try{mainRec.onend=null;mainRec.onerror=null;mainRec.onresult=null;mainRec.abort();}catch(e){}mainRec=null;}
+  mainRec=new SR();
+  mainRec.continuous=false;mainRec.interimResults=false;mainRec.lang=recogLang;
+  isListening=true;setStatus('listen');
+  document.getElementById('wake-status').textContent='Listening... ('+LANG_NAMES[recogLang]+')';
+  mainRec.onresult=async(e)=>{
+    const text=e.results[0][0].transcript.trim();
+    isListening=false;
+    if(!text){scheduleRearm(250);return;}
+    await handleUtterance(text);
+  };
+  // onerror does NOT schedule a restart — onend always follows it, so this avoids double-scheduling.
+  mainRec.onerror=(e)=>{
+    isListening=false;
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){micActive=false;setStatus(null);log('[ MIC ] Permission denied','err');return;}
+    if(e.error==='audio-capture'){log('[ MIC ] No microphone found','err');}
+    // 'no-speech' / 'aborted' / 'network' are normal — let onend re-arm once.
+  };
+  mainRec.onend=()=>{
+    isListening=false;
+    if(micActive&&!isSpeaking&&!ttsBusy&&!awaitingReply)scheduleRearm(250); // single restart path
+  };
+  try{mainRec.start();}catch(e){isListening=false;scheduleRearm(500);}
+}
+
+// ── WEB SEARCH ──
+// Lets him look things up instead of guessing or saying "I don't know".
+// Anthropic runs the search server-side; results arrive inside the same stream.
+let webSearchOn = true;
+const MAX_SEARCHES_PER_TURN = 3;   // cost guard — searches are billed per use
+let searchesThisTurn = 0;
+
+// ── CLAUDE API ──
+// images: optional array of base64 JPEG strings (no data: prefix).
+// Runs a multi-round loop: he can call a tool, we run it, and he continues with the
+// result. Rounds are capped so a confused model can't loop forever.
+const MAX_TOOL_ROUNDS = 3;
+
+// Tools he can reach for in NORMAL conversation. Built fresh each turn so the camera
+// tools only exist when there's actually a camera — no point offering him eyes he
+// doesn't have. Descriptions are the ONLY thing steering when he uses these, so they
+// spell out when NOT to fire.
+function normalTools(){
+  const t = [{
+    name: 'set_person',
+    description: "Set who you are currently talking to, loading that person's saved profile and memories. Call this ONLY when someone explicitly identifies themselves (\"it's me, Kostas\", \"I'm Daniela\", \"this is Maria\") or explicitly asks you to switch to someone's profile. Do NOT call it just because a name is mentioned in conversation, and do NOT call it to guess who someone is.",
+    input_schema: { type:'object', properties:{
+      name: { type:'string', description:'The person\'s name exactly as they said it.' }
+    }, required:['name'] }
+  }];
+  if (camActive) t.push({
+    name: 'scan_object',
+    description: "Take several photos of a physical object from different angles through your camera and study them together. Use this when someone wants you to examine, scan, or identify an object they're showing you from all sides. You ALREADY see the live view on every message, so do NOT call this just to look at something — only call it when multiple angles genuinely matter.",
+    input_schema: { type:'object', properties:{}, required:[] }
+  });
+  // Server-side tool: Anthropic runs the search and feeds him the results inside the
+  // same response — no search API key, no second round trip. He decides when to use it.
+  if (webSearchOn) t.push({
+    type: 'web_search_20250305',
+    name: 'web_search',
+    max_uses: MAX_SEARCHES_PER_TURN
+  });
+  return t;
+}
+
+// Replace image data in history with short text notes once a turn is done. Images are
+// only needed for the turn that used them; leaving them in would re-upload and re-bill
+// every one on every later message. Handles both ambient frames and scan tool results.
+function stripImagesFromHistory(){
+  for (const m of conversationHistory) {
+    if (!Array.isArray(m.content)) continue;
+    m.content = m.content.map(b => {
+      if (b.type === 'image') return { type:'text', text:'[an image he saw earlier]' };
+      if (b.type === 'tool_result' && Array.isArray(b.content)) {
+        const imgs = b.content.filter(x => x.type === 'image').length;
+        if (imgs) return { ...b, content:[{ type:'text', text:`[${imgs} frames captured and examined]` }] };
+      }
+      return b;
+    });
+  }
+}
+
+async function askErebus(userText, images){
+  if(!config.anthropic){addMessage('EREBUS','API key required.');awaitingReply=false;if(micActive)scheduleRearm(400);return;}
+  // AMBIENT VISION: if the camera is live and no frames were passed explicitly, grab
+  // the current view now. He simply sees whatever is in front of him whenever you
+  // speak — no command, no button. The frame is already local, so this costs no latency.
+  if((!images || !images.length) && camActive && ambientVision && !camBusy){
+    const f = captureFrame();
+    if(f) images = [f];
+  }
+  awaitingReply=true;
+  searchesThisTurn=0;
+  // Pull the relevant slice of the knowledge vault for this turn (entities +
+  // relationships about his world). Best-effort; empty string if unavailable.
+  currentVaultKnowledge = '';
+  try{
+    const vr = await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'vault_query', query:userText, n:8})});
+    if(vr.ok){ const vd = await vr.json(); currentVaultKnowledge = vd.knowledge || ''; }
+  }catch(e){ /* vault optional; carry on */ }
+  const t0=Date.now();
+  setStatus('think');
+  document.getElementById('erebus-thinking').textContent='...';
+  if(images && images.length){
+    const blocks=images.map(b64=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}}));
+    blocks.push({type:'text',text:userText});
+    conversationHistory.push({role:'user', content:blocks});
+  } else {
+    conversationHistory.push({role:'user', content:userText});
+  }
+
+  // ── STREAMING ──
+  let fullReply = '';
+  let sentenceBuffer = '';
+  let firstChunk = true;
+  let msgEl = null;
+  const speakQueue = [];
+  let isSpeakingQueue = false;
+  // Expression tag stripping: his reply starts with a hidden [expr:...] tag. We hold
+  // the leading tokens until we can parse (or rule out) the tag, so it never reaches
+  // the transcript or the voice.
+  let exprTagHandled = false;
+  let exprLeadBuf = '';
+
+  // Sentence splitter — fires TTS as soon as a sentence is complete
+  async function flushSentence(force=false) {
+    const terminators = /[.!?。]+\s*/;
+    let match;
+    while ((match = sentenceBuffer.search(terminators)) !== -1) {
+      const end = match + sentenceBuffer.match(terminators)[0].length;
+      const sentence = sentenceBuffer.slice(0, end).trim();
+      sentenceBuffer = sentenceBuffer.slice(end);
+      if (sentence.length > 2) {
+        speakQueue.push(sentence);
+        drainSpeakQueue();
+      }
+    }
+    // Force flush remaining on stream end
+    if (force && sentenceBuffer.trim().length > 2) {
+      speakQueue.push(sentenceBuffer.trim());
+      sentenceBuffer = '';
+      drainSpeakQueue();
+    }
+  }
+
+  async function drainSpeakQueue() {
+    if (isSpeakingQueue) return;
+    isSpeakingQueue = true;
+    ttsBusy = true;
+    interruptFlag = false;   // fresh reply — clear any previous interrupt
+    let prefetch = null;  // audio for the NEXT sentence, fetched while the current one plays
+    while (speakQueue.length > 0 || prefetch) {
+      if (interruptFlag) {          // he got cut off — drop the rest of the reply
+        speakQueue.length = 0;
+        prefetch = null;
+        break;
+      }
+      const item = prefetch ? await prefetch : await synthSentence(speakQueue.shift());
+      // kick off the next fetch NOW so it's ready the moment this sentence ends
+      prefetch = speakQueue.length > 0 ? synthSentence(speakQueue.shift()) : null;
+      await playSentence(item);
+    }
+    isSpeakingQueue = false;
+    ttsBusy = false;
+    if (!interruptFlag && micActive) scheduleRearm(400);
+  }
+
+  // Wait until he has actually finished talking. Needed before running a tool so the
+  // camera doesn't start capturing while he's still saying "let me look at that".
+  async function waitForSpeech(){
+    while (isSpeakingQueue || speakQueue.length > 0) await sleep(120);
+  }
+
+  // One streamed request. Returns the text he said plus any tools he reached for.
+  async function streamRound(){
+    const res = await fetch(`${API}/api/claude/stream`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        anthropic_key: config.anthropic,
+        model: config.model,
+        max_tokens: 400,
+        system: buildSystemPrompt(),
+        messages: conversationHistory,
+        tools: normalTools()
+      })
+    });
+    if (!res.ok) throw new Error('Stream error ' + res.status);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    const blocks = {};       // index -> block being assembled
+    let roundText = '';
+    let sseBuf = '';         // holds a partial line across chunk boundaries
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      sseBuf += decoder.decode(value, {stream: true});
+      // A network chunk can split an SSE line in half. Keep the trailing partial line
+      // for the next chunk — otherwise its JSON fails to parse and gets silently
+      // dropped, which would corrupt a tool's arguments.
+      const lines = sseBuf.split('\n');
+      sseBuf = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]' || data === '') continue;
+
+        let evt; try { evt = JSON.parse(data); } catch(e) { continue; }
+
+        if (evt.type === 'content_block_start') {
+          const cb = evt.content_block || {};
+          if (cb.type === 'tool_use') {
+            blocks[evt.index] = { type:'tool_use', id:cb.id, name:cb.name, json:'' };
+          } else if (cb.type === 'server_tool_use') {
+            // He's asking to search. Anthropic runs it; we just narrate it.
+            blocks[evt.index] = { type:'server_tool_use', name:cb.name, json:'' };
+            setStatus('think');
+            document.getElementById('erebus-thinking').textContent = 'searching...';
+          } else if (cb.type === 'web_search_tool_result') {
+            // Results arrive complete here — nothing to accumulate.
+            const n = Array.isArray(cb.content) ? cb.content.length : 0;
+            blocks[evt.index] = { type:'search_result' };
+            log(`[ WEB ] ${n} result${n===1?'':'s'} found`, 'ok');
+            document.getElementById('erebus-thinking').textContent = '';
+          } else {
+            blocks[evt.index] = { type:'text' };
+          }
+        }
+        else if (evt.type === 'content_block_stop') {
+          const b = blocks[evt.index];
+          if (b && b.type === 'server_tool_use') {
+            let q = '';
+            try { q = (JSON.parse(b.json || '{}').query) || ''; } catch(e) {}
+            searchesThisTurn++;
+            log(`[ WEB ] Searching: "${q}"`, 'ok');
+          }
+        }
+        else if (evt.type === 'content_block_delta') {
+          const d = evt.delta || {};
+          if (d.type === 'text_delta') {
+            let token = d.text;
+
+            // Hold the first tokens until we can parse (or rule out) the [expr:...]
+            // tag, so it never reaches the transcript or the voice.
+            if (!exprTagHandled) {
+              exprLeadBuf += token;
+              const parsed = parseExpressionTag(exprLeadBuf);
+              if (parsed.state) {
+                setExpression(parsed.state, parsed.spike);
+                log('[ FACE ] '+parsed.state+(parsed.spike?' (spike)':''), 'ok');
+                exprTagHandled = true;
+                token = parsed.rest;
+                exprLeadBuf = '';
+                if (!token) continue;   // nothing after the tag yet
+              } else if (exprLeadBuf.length < 24 && /^\s*\[?e?x?p?r?:?/i.test(exprLeadBuf)) {
+                continue;   // still possibly the tag forming — keep buffering
+              } else {
+                exprTagHandled = true;   // no tag — release the buffer
+                token = exprLeadBuf;
+                exprLeadBuf = '';
+              }
+            }
+
+            roundText += token;
+            fullReply += token;
+            sentenceBuffer += token;
+
+            if (firstChunk) {
+              firstChunk = false;
+              setStatus('speak');
+              document.getElementById('erebus-thinking').textContent = '';
+              setLatency(Date.now()-t0);
+              log(`[ STR ] Streaming started in ${Date.now()-t0}ms`, 'ok');
+              const el = document.getElementById('transcript');
+              const d2 = document.createElement('div');
+              d2.className = 'transcript-line';
+              d2.innerHTML = `<span class="who">EREBUS</span><span class="msg"></span>`;
+              el.appendChild(d2);
+              el.scrollTop = el.scrollHeight;
+              msgEl = d2.querySelector('.msg');   // this bubble's own span — no shared id collision
+            }
+            if (msgEl) {
+              msgEl.textContent = msgEl.textContent + token;
+              document.getElementById('transcript').scrollTop = 99999;
+            }
+            await flushSentence(false);
+          }
+          else if (d.type === 'input_json_delta') {
+            const b = blocks[evt.index];
+            if (b) b.json += (d.partial_json || '');
+          }
+        }
+        else if (evt.type === 'message_delta') {
+          if (evt.usage) {
+            totalTokens += evt.usage.output_tokens || 0;
+            document.getElementById('token-count').textContent = 'Tokens: ' + totalTokens;
+          }
+        }
+        else if (evt.type === 'message_start' && evt.message?.usage) {
+          totalTokens += evt.message.usage.input_tokens || 0;
+        }
+      }
+    }
+
+    const toolUses = Object.values(blocks)
+      .filter(b => b.type === 'tool_use')
+      .map(b => {
+        let input = {};
+        try { input = b.json ? JSON.parse(b.json) : {}; }
+        catch(e) { log('[ TOOL ] Bad arguments from model for '+b.name, 'warn'); }
+        return { id:b.id, name:b.name, input };
+      });
+    return { text: roundText, toolUses };
+  }
+
+  // Run one tool he asked for. Returns the tool_result content to hand back.
+  async function execTool(tu){
+    log(`[ TOOL ] ${tu.name} ${JSON.stringify(tu.input)}`, 'ok');
+    if (tu.name === 'set_person') {
+      const name = (tu.input.name || '').trim();
+      if (!name) return 'No name was given.';
+      await setPerson(name, true);   // quiet: he speaks his own reaction
+      return `Now talking to ${memory.personName}. Known about them: ` +
+             (memory.personFacts.length ? memory.personFacts.join('; ') : 'nothing yet');
+    }
+    if (tu.name === 'scan_object') {
+      if (!camActive) return 'The camera is off, so I could not scan.';
+      const frames = await captureScanFrames();
+      if (!frames.length) return 'The camera captured nothing.';
+      return [
+        ...frames.map(f => ({ type:'image', source:{ type:'base64', media_type:'image/jpeg', data:f } })),
+        { type:'text', text:`${frames.length} frames of the same object, captured in order from different angles.` }
+      ];
+    }
+    return 'Unknown tool.';
+  }
+
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const { text, toolUses } = await streamRound();
+
+      // Record what he said + any tools he reached for
+      const assistantContent = [];
+      if (text) assistantContent.push({ type:'text', text });
+      for (const tu of toolUses) assistantContent.push({ type:'tool_use', id:tu.id, name:tu.name, input:tu.input });
+      if (assistantContent.length) {
+        conversationHistory.push({
+          role: 'assistant',
+          content: (toolUses.length === 0) ? text : assistantContent
+        });
+      }
+
+      if (!toolUses.length) break;
+
+      // Let him finish the sentence before the tool physically acts
+      await flushSentence(true);
+      await waitForSpeech();
+
+      const results = [];
+      for (const tu of toolUses) {
+        let content;
+        try { content = await execTool(tu); }
+        catch(e) { content = 'The tool failed: ' + e.message; }
+        results.push({ type:'tool_result', tool_use_id:tu.id, content });
+      }
+      conversationHistory.push({ role:'user', content:results });
+
+      // Next round streams into its own bubble
+      firstChunk = true;
+      msgEl = null;
+    }
+
+    // Flush any remaining text
+    await flushSentence(true);
+
+    if (fullReply) {
+      await extractMemoryFacts(userText);
+      saveConversation(userText, fullReply);
+    }
+
+  } catch(e) {
+    setStatus(null);
+    document.getElementById('erebus-thinking').textContent='';
+    log('[ ERR ] '+e.message,'err');
+    if(!fullReply) addMessage('EREBUS','Error: '+e.message);
+  } finally {
+    // Only once the whole multi-round turn is over — rounds in between still need
+    // the images (a scan's frames are read by the round right after it).
+    stripImagesFromHistory();
+    awaitingReply=false;
+    // Safety re-arm for the no-speech case (empty reply, TTS off). If speech is
+    // playing, the guards make this a no-op and the last clip's onended re-arms.
+    if(micActive) scheduleRearm(600);
+  }
+}
+
+// ══ VISION ══════════════════════════════════════════════════════════════
+// The <video> element IS the live feed — it runs at the camera's native rate
+// (~30fps), so nothing needs polling. We only grab still frames when he looks.
+let camStream=null, camActive=false, camBusy=false;
+let ambientVision=true;     // camera on => he sees the live frame on every turn
+const SCAN_FRAMES=5;        // how many angles a scan collects
+const SCAN_INTERVAL=1500;   // ms between grabs -> ~7s of turning the object
+const CAP_W=640;            // capture size sent to the model (smaller = faster + cheaper)
+
+function camStatus(msg){const e=document.getElementById('cam-status');if(e)e.textContent=msg;}
+function setVisionButtons(){
+  const on = camActive && !camBusy;
+  const l=document.getElementById('btn-look'), s=document.getElementById('btn-scan');
+  if(l)l.disabled=!on; if(s)s.disabled=!on;
+}
+
+async function toggleCamera(){
+  const video=document.getElementById('cam-video');
+  const ph=document.getElementById('cam-placeholder');
+  const btn=document.getElementById('btn-cam');
+  if(camActive){
+    try{camStream.getTracks().forEach(t=>t.stop());}catch(e){}
+    camStream=null;camActive=false;
+    video.srcObject=null;video.style.display='none';ph.style.display='flex';
+    btn.textContent='▶ ACTIVATE CAMERA';btn.classList.remove('active');
+    camStatus('Camera inactive');setVisionButtons();
+    // face recognition can't run without eyes — shut it down cleanly
+    if(faceRecogOn){
+      faceRecogOn=false;
+      if(faceTimer){clearInterval(faceTimer);faceTimer=null;}
+      const fb=document.getElementById('btn-face-toggle');
+      if(fb){fb.textContent='◉ ENABLE RECOGNITION';fb.classList.remove('active');}
+      const eb=document.getElementById('btn-enroll'); if(eb)eb.disabled=true;
+      faceStatus('Off (camera stopped)');
+    }
+    log('[ CAM ] Deactivated');
+    return;
+  }
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject=camStream;
+    await video.play().catch(()=>{});
+    camActive=true;
+    video.style.display='block';ph.style.display='none';
+    btn.textContent='⏹ DEACTIVATE CAMERA';btn.classList.add('active');
+    const track=camStream.getVideoTracks()[0];
+    const s=track.getSettings?track.getSettings():{};
+    camStatus(`Live · ${s.width||'?'}×${s.height||'?'}`);
+    setVisionButtons();
+    log(`[ CAM ] Live · ${s.width||'?'}×${s.height||'?'} · ${track.label||'camera'}`,'ok');
+  }catch(e){
+    camStatus('Camera blocked or unavailable');
+    log('[ CAM ] '+(e.name==='NotAllowedError'?'Permission denied — allow camera in Chrome':e.message),'err');
+  }
+}
+
+// Grab one still from the live feed as base64 JPEG (no data: prefix)
+function captureFrame(){
+  const video=document.getElementById('cam-video');
+  if(!video||!video.videoWidth)return null;
+  const scale=CAP_W/video.videoWidth;
+  const c=document.createElement('canvas');
+  c.width=CAP_W; c.height=Math.round(video.videoHeight*scale);
+  c.getContext('2d').drawImage(video,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.8).split(',')[1];
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// Single glance — "what do you see right now?"
+async function lookOnce(){
+  if(!camActive||camBusy)return;
+  const frame=captureFrame();
+  if(!frame){log('[ CAM ] No frame available yet','warn');return;}
+  camBusy=true;setVisionButtons();camStatus('Looking...');
+  addMessage('YOU','[shows Erebus the camera]');
+  log('[ CAM ] Captured 1 frame → vision','ok');
+  try{
+    await askErebus('This is what your camera sees right now. React to it as Erebus — curious and brief. What is it?',[frame]);
+  } finally {
+    camBusy=false;setVisionButtons();camStatus(camActive?'Live':'Camera inactive');
+  }
+}
+
+// Pure capture — grabs the frames with beeps, no speech, no API call. Shared by the
+// SCAN button and the scan_object tool so both behave identically.
+async function captureScanFrames(){
+  const frames=[];
+  for(let i=0;i<SCAN_FRAMES;i++){
+    camStatus(`Capturing ${i+1}/${SCAN_FRAMES}...`);
+    const f=captureFrame();
+    if(f)frames.push(f);
+    beep(660+i*40,60);
+    if(i<SCAN_FRAMES-1)await sleep(SCAN_INTERVAL);
+  }
+  camStatus('Studying...');
+  log(`[ CAM ] Scan captured ${frames.length} frames`,'ok');
+  return frames;
+}
+
+// Multi-angle scan — he asks you to turn it, grabs frames, then studies them together
+async function scanObject(){
+  if(!camActive||camBusy)return;
+  camBusy=true;setVisionButtons();
+  try{
+    await speakLine(`Show me. Turn it slowly — I am taking ${SCAN_FRAMES} looks.`);
+    const frames=await captureScanFrames();
+    if(!frames.length){log('[ CAM ] Scan captured nothing','err');await speakLine('I could not see anything.');return;}
+    addMessage('YOU',`[shows Erebus an object from ${frames.length} angles]`);
+    await askErebus(
+      `These ${frames.length} images are the SAME object seen from different angles through your camera, captured in order. `+
+      `Study them together and identify it. Say what it is, then one thing you notice or wonder about it. Stay brief and in character.`,
+      frames
+    );
+  } finally {
+    camBusy=false;setVisionButtons();camStatus(camActive?'Live':'Camera inactive');
+  }
+}
+
+// ══ FACE RECOGNITION ════════════════════════════════════════════════════
+// Runs entirely in the browser via face-api.js. Deliberately NOT dlib/PyTorch —
+// that avoids the native-dependency trap that cost us days with ChromaDB.
+//
+// How it works: a network turns a face into 128 numbers (a "descriptor"). The same
+// person from a different angle gives roughly the same numbers; a different person
+// gives very different ones. Enrolment stores several descriptors per person;
+// recognition measures distance to the closest stored one.
+//
+// LIMIT: a webcam is 2D, so this is Android-face-unlock tier, not Face ID.
+// Good enough to greet someone by name. Never gate anything sensitive on it.
+const FACEAPI_VER = '1.7.15';
+const FACEAPI_CDN = `https://cdn.jsdelivr.net/npm/@vladmandic/face-api@${FACEAPI_VER}`;
+const FACE_MATCH_THRESHOLD = 0.55;  // lower = stricter. 0.6 is the library default;
+                                    // stricter here because greeting the WRONG person by name is worse than not greeting.
+const FACE_SCAN_INTERVAL = 2000;    // ms between recognition attempts
+const ENROLL_SHOTS = 5;             // descriptors captured per enrolment
+const ENROLL_GAP = 1400;            // ms between enrolment captures
+
+let faceReady = false;      // models loaded
+let faceLoading = false;
+let faceRecogOn = false;
+let faceTimer = null;
+let faceEnrolling = false;
+let knownFaces = [];        // [{key, name, descriptors:[[128],...]}]
+let lastGreeted = null;     // who we last auto-switched to (avoids re-greeting)
+let lastSeenAt = 0;
+
+function faceStatus(msg){ const e=document.getElementById('face-status'); if(e)e.textContent=msg; }
+
+// Load the library + models on demand, so normal startup stays fast.
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src=src; s.onload=resolve; s.onerror=()=>reject(new Error('could not load '+src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureFaceModels(){
+  if(faceReady) return true;
+  if(faceLoading) return false;
+  faceLoading = true;
+  try{
+    faceStatus('Loading library...');
+    if(typeof faceapi === 'undefined') await loadScript(`${FACEAPI_CDN}/dist/face-api.js`);
+    faceStatus('Loading models (~7MB, first time only)...');
+    log('[ FACE ] Downloading models — first run only, then cached','ok');
+    const M = `${FACEAPI_CDN}/model/`;
+    await faceapi.nets.tinyFaceDetector.loadFromUri(M);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(M);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(M);
+    faceReady = true;
+    log('[ FACE ] Models ready','ok');
+    return true;
+  }catch(e){
+    log('[ FACE ] Failed to load: '+e.message+' (needs internet)','err');
+    faceStatus('Load failed — check connection');
+    return false;
+  }finally{ faceLoading = false; }
+}
+
+// Pull known faces from the server so we can match locally
+async function refreshKnownFaces(){
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'face_list'})});
+    const d=await res.json();
+    knownFaces = d.known || [];
+    log(`[ FACE ] ${knownFaces.length} known face${knownFaces.length===1?'':'s'}: `+
+        (knownFaces.map(k=>k.name).join(', ')||'none'),'ok');
+  }catch(e){ knownFaces=[]; }
+}
+
+function euclid(a,b){
+  let s=0; for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; } return Math.sqrt(s);
+}
+
+// One detection pass on the live video -> 128-number descriptor (or null)
+async function grabDescriptor(){
+  const video=document.getElementById('cam-video');
+  if(!video||!video.videoWidth) return null;
+  const det = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({inputSize:320, scoreThreshold:0.5}))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+  return det ? Array.from(det.descriptor) : null;
+}
+
+// Closest stored person, or null if nobody is near enough
+function matchFace(desc){
+  let best=null, bestDist=Infinity;
+  for(const p of knownFaces){
+    for(const known of p.descriptors){
+      const d=euclid(desc, known);
+      if(d<bestDist){ bestDist=d; best=p; }
+    }
+  }
+  return (best && bestDist<=FACE_MATCH_THRESHOLD) ? {person:best, dist:bestDist} : null;
+}
+
+async function toggleFaceRecog(){
+  const btn=document.getElementById('btn-face-toggle');
+  if(faceRecogOn){
+    faceRecogOn=false;
+    if(faceTimer){ clearInterval(faceTimer); faceTimer=null; }
+    btn.textContent='◉ ENABLE RECOGNITION'; btn.classList.remove('active');
+    document.getElementById('btn-enroll').disabled=true;
+    faceStatus('Off'); log('[ FACE ] Recognition off');
+    return;
+  }
+  if(!camActive){ log('[ FACE ] Turn the camera on first','warn'); faceStatus('Camera is off'); return; }
+  btn.disabled=true;
+  const ok=await ensureFaceModels();
+  btn.disabled=false;
+  if(!ok) return;
+  await refreshKnownFaces();
+  faceRecogOn=true;
+  btn.textContent='◉ DISABLE RECOGNITION'; btn.classList.add('active');
+  document.getElementById('btn-enroll').disabled=false;
+  faceStatus(knownFaces.length?`Watching · knows ${knownFaces.length}`:'Watching · nobody enrolled yet');
+  log('[ FACE ] Recognition on','ok');
+  faceTimer=setInterval(faceTick, FACE_SCAN_INTERVAL);
+}
+
+// The recognition loop. Deliberately quiet — it only speaks when the person CHANGES.
+async function faceTick(){
+  if(!faceRecogOn||!camActive||camBusy||faceEnrolling||isSpeaking||ttsBusy) return;
+  try{
+    const desc=await grabDescriptor();
+    if(!desc){
+      if(Date.now()-lastSeenAt>6000){
+        faceStatus(knownFaces.length?`Watching · knows ${knownFaces.length}`:'Watching · nobody enrolled');
+        lastPersonAwayAt=Date.now();
+        // After a real absence (~30s gone), allow a fresh greeting next time.
+        if(Date.now()-lastSeenAt>30000){ lastGreeted=null; }
+      }
+      return;
+    }
+    lastSeenAt=Date.now();
+    const m=matchFace(desc);
+    if(!m){
+      faceStatus('Sees someone unknown');
+      return;
+    }
+    faceStatus(`Sees ${m.person.name} (${m.dist.toFixed(2)})`);
+    // Arrival greeting: only when this person genuinely just ARRIVED — i.e. they
+    // weren't the active person AND we haven't greeted them recently. The proactive
+    // engine handles it in-character and time-aware ("Evening, Konstantinos.").
+    const arrivedAfterAbsence = (Date.now() - lastPersonAwayAt > 20000);
+    if(m.person.key!==memory.activePerson && m.person.key!==lastGreeted){
+      lastGreeted=m.person.key;
+      proactiveGreetedPerson=m.person.key;
+      log(`[ FACE ] Recognised ${m.person.name} (distance ${m.dist.toFixed(3)})`,'ok');
+      await setPerson(m.person.name, true);
+      // greet in character via the proactive engine (falls back gracefully)
+      await proactiveGreet(m.person.name);
+    }
+  }catch(e){ /* a failed frame is not worth interrupting anything for */ }
+}
+
+// Guided multi-angle enrolment, phone-style.
+async function enrollFace(name){
+  if(faceEnrolling) return;
+  if(!camActive){ log('[ FACE ] Camera is off','warn'); return; }
+  if(!await ensureFaceModels()) return;
+  const who=(name||memory.personName||'').trim();
+  if(!who){
+    addMessage('EREBUS','Tell me who you are first — type /person YourName, or /enroll YourName.');
+    return;
+  }
+  faceEnrolling=true;
+  document.getElementById('btn-enroll').disabled=true;
+  try{
+    await speakLine(`Okay ${who}, look at me and turn your head slowly. Taking ${ENROLL_SHOTS} looks.`);
+    const shots=[];
+    let misses=0;
+    for(let i=0;i<ENROLL_SHOTS;i++){
+      faceStatus(`Learning ${who}: ${shots.length}/${ENROLL_SHOTS}`);
+      const d=await grabDescriptor();
+      if(d){ shots.push(d); beep(700+i*50,60); }
+      else { misses++; beep(300,80); }
+      if(i<ENROLL_SHOTS-1) await sleep(ENROLL_GAP);
+    }
+    if(shots.length<2){
+      faceStatus('Could not see a face');
+      await speakLine('I could not see your face properly. Try again with more light.');
+      return;
+    }
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'face_save', name:who, descriptors:shots})});
+    const d=await res.json();
+    if(d.error){ log('[ FACE ] Save failed: '+d.error.message,'err'); await speakLine('I could not save that.'); return; }
+    log(`[ FACE ] Learned ${d.name} — ${d.added} new, ${d.total} total`+(misses?` (${misses} missed)`:''),'ok');
+    await refreshKnownFaces();
+    memory.activePerson=d.key; memory.personName=d.name;
+    await loadMemory();
+    lastGreeted=d.key;
+    faceStatus(`Learned ${d.name} · knows ${knownFaces.length}`);
+    await speakLine(`Got it. I will remember your face, ${d.name}.`);
+  }catch(e){
+    log('[ FACE ] Enrolment error: '+e.message,'err');
+  }finally{
+    faceEnrolling=false;
+    document.getElementById('btn-enroll').disabled=!faceRecogOn;
+  }
+}
+
+async function forgetFace(name){
+  const who=(name||'').trim();
+  if(!who){ addMessage('EREBUS','Who should I forget? Use /forgetface Name'); return; }
+  try{
+    const res=await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'face_forget', name:who})});
+    const d=await res.json();
+    if(d.error){ addMessage('EREBUS','I have no profile called '+who+'.'); return; }
+    await refreshKnownFaces();
+    if(lastGreeted===who.toLowerCase()) lastGreeted=null;
+    addMessage('EREBUS',`Forgot ${d.name}'s face (${d.removed} samples). Their profile and memories are still here.`);
+    log(`[ FACE ] Deleted ${d.removed} face samples for ${d.name}`,'warn');
+  }catch(e){}
+}
+
+async function listFaces(){
+  await refreshKnownFaces();
+  if(!knownFaces.length){ addMessage('EREBUS','I don\'t know anyone\'s face yet. Use /enroll YourName.'); return; }
+  addMessage('EREBUS','Faces I know:\n'+knownFaces.map(k=>`- ${k.name} (${k.descriptors.length} samples)`).join('\n'));
+}
+
+// ══ SETTINGS MODE ═══════════════════════════════════════════════════════
+// A conversational "pause menu" for his own parameters. Entered with /settings or
+// "protocol settings". Inside, the MODEL drives via tool use — that's what lets
+// "change that to 30" resolve "that" from the previous sentence, and what makes it
+// work in every language for free instead of needing a regex per phrase per language.
+let settingsMode=false;
+let settingsHistory=[];
+let pendingToolResults=null;   // tool_result blocks ride along with the next user message
+
+const METRIC_KEYS=['creativity','curiosity','talk','emotion','volume'];
+const METRIC_LABELS={creativity:'creativity',curiosity:'curiosity',talk:'talkativeness',emotion:'emotion',volume:'voice volume'};
+
+function getMetric(k){const sl=document.getElementById('sl-'+k);return sl?parseInt(sl.value):(metrics[k]||0);}
+function applyMetric(k,v){
+  const sl=document.getElementById('sl-'+k);
+  if(!sl)return false;
+  v=Math.max(0,Math.min(100,Math.round(Number(v))));
+  if(!isFinite(v))return false;
+  sl.value=v;
+  onSlider(k,v);        // reuses the real slider handler: fill, %, live effects, log
+  return true;
+}
+
+const SETTINGS_TOOLS=[
+  {
+    name:'set_metric',
+    description:'Change one of your personality metrics to a new value from 0 to 100. Call this ONLY when the user asks you to change, set, raise or lower a value. Do not call it to answer questions.',
+    input_schema:{type:'object',properties:{
+      metric:{type:'string',enum:METRIC_KEYS,description:'creativity, curiosity, talk (talkativeness), emotion, or volume (voice volume)'},
+      value:{type:'integer',minimum:0,maximum:100,description:'the new value, 0-100'}
+    },required:['metric','value']}
+  },
+  {
+    name:'close_settings',
+    description:'Close the settings menu and go back to normal conversation. Call this when the user signals they are finished — "that is all", "ok done", "close it", or similar in any language.',
+    input_schema:{type:'object',properties:{},required:[]}
+  }
+];
+
+function settingsPrompt(){
+  const vals=METRIC_KEYS.map(k=>`- ${METRIC_LABELS[k]}: ${getMetric(k)}`).join('\n');
+  return `You are Erebus, and you are in SETTINGS MODE — a focused menu where the user reviews and adjusts your own personality parameters. Your usual personality is paused here: be brief, clear and cooperative.
+
+Your current values (0-100):
+${vals}
+
+Rules:
+- If the user ASKS about a value, just say the number. Do NOT call a tool for a question.
+- To CHANGE a value, call set_metric. In the same reply, say the change out loud, e.g. "Creativity is now 30."
+- "it" / "that" usually refers to the metric just discussed. Resolve it from context.
+- When the user signals they're finished, call close_settings and say a short sign-off.
+- Keep every reply to ONE short sentence. Always reply in the same language the user is speaking.`;
+}
+
+async function openSettings(){
+  settingsMode=true; settingsHistory=[]; pendingToolResults=null;
+  const t=document.getElementById('metrics-title');
+  if(t)t.textContent='SYSTEM METRICS  ⚙ OPEN';
+  log('[ SET ] Settings mode OPEN','ok');
+  await speakLine('Settings open. I have creativity, curiosity, talkativeness, emotion, and voice volume. Ask me a value, or tell me what to change.');
+}
+function exitSettings(){
+  settingsMode=false; settingsHistory=[]; pendingToolResults=null;
+  const t=document.getElementById('metrics-title');
+  if(t)t.textContent='SYSTEM METRICS';
+  log('[ SET ] Settings mode CLOSED','ok');
+}
+
+async function settingsTurn(userText){
+  // Merge any tool_result from the previous turn into this user message, so the
+  // conversation keeps valid user/assistant alternation without an extra API call.
+  const content=[];
+  if(pendingToolResults){content.push(...pendingToolResults);pendingToolResults=null;}
+  content.push({type:'text',text:userText});
+  settingsHistory.push({role:'user',content});
+  if(settingsHistory.length>20)settingsHistory=settingsHistory.slice(-20);
+
+  awaitingReply=true; setStatus('think');
+  try{
+    const res=await fetch(`${API}/api/claude`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        anthropic_key:config.anthropic,
+        model:config.model,
+        max_tokens:300,
+        system:settingsPrompt(),
+        messages:settingsHistory,
+        tools:SETTINGS_TOOLS
+      })});
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message||'settings error');
+
+    let text='';
+    const toolCalls=[];
+    for(const b of (data.content||[])){
+      if(b.type==='text')text+=b.text;
+      if(b.type==='tool_use')toolCalls.push(b);
+    }
+    settingsHistory.push({role:'assistant',content:data.content});
+
+    let closed=false;
+    const results=[];
+    for(const tc of toolCalls){
+      if(tc.name==='set_metric'){
+        const ok=applyMetric(tc.input.metric,tc.input.value);
+        results.push({type:'tool_result',tool_use_id:tc.id,
+          content: ok?`${tc.input.metric} is now ${tc.input.value}`:`failed to set ${tc.input.metric}`});
+        if(!text.trim()&&ok)text=`${METRIC_LABELS[tc.input.metric]} is now ${tc.input.value}.`;
+      } else if(tc.name==='close_settings'){
+        closed=true;
+        results.push({type:'tool_result',tool_use_id:tc.id,content:'settings closed'});
+        if(!text.trim())text='Settings closed.';
+      } else {
+        results.push({type:'tool_result',tool_use_id:tc.id,content:'unknown tool',is_error:true});
+      }
+    }
+    if(results.length)pendingToolResults=results;
+
+    setStatus(null);
+    if(text.trim())await speakLine(text.trim());
+    if(closed)exitSettings();
+  }catch(e){
+    setStatus(null);
+    log('[ SET ] '+e.message,'err');
+    await speakLine('Something went wrong in settings.');
+  }finally{
+    awaitingReply=false;
+    if(micActive)scheduleRearm(400);
+  }
+}
+
+// "protocol settings" in any of the four languages (\b is Latin-only, so avoid it)
+const SETTINGS_TRIGGER=/^\s*(?:protocol|πρωτόκολλο|протокол)[\s,]+(?:settings?|ρυθμίσεις|ρυθμισεις|настройки|настройка)[\s,.!?]*$/i;
+
+// ── BROWSER TTS ──
+function speakBrowser(text){
+  return new Promise((resolve)=>{
+    window.speechSynthesis.cancel();
+    const utt=new SpeechSynthesisUtterance(text);
+    utt.rate=0.95;utt.pitch=0.8;utt.volume=1;
+    const voices=window.speechSynthesis.getVoices();
+    const deep=voices.find(v=>v.name.toLowerCase().includes('david')||v.name.toLowerCase().includes('mark'));
+    if(deep)utt.voice=deep;
+
+    // Simulate jaw movement for browser TTS using word boundary events
+    let jawInterval = null;
+    utt.onboundary = (e) => {
+      if(e.name === 'word') {
+        // Spike jaw on each word
+        jawAmp = 0.6 + Math.random()*0.4;
+        setTimeout(()=>{ jawAmp = 0.1 + Math.random()*0.2; }, 80);
+        setTimeout(()=>{ jawAmp = 0.5 + Math.random()*0.3; }, 160);
+        setTimeout(()=>{ jawAmp = 0.0; }, 280);
+      }
+    };
+    // Fallback oscillation if onboundary not supported
+    jawInterval = setInterval(()=>{
+      if(isSpeaking) jawAmp = 0.3 + Math.abs(Math.sin(Date.now()*0.012))*0.6;
+    }, 50);
+
+    utt.onend=()=>{
+      clearInterval(jawInterval); jawAmp=0;
+      isSpeaking=false;setStatus(null);
+      resolve();
+    };
+    utt.onerror=()=>{
+      clearInterval(jawInterval); jawAmp=0;
+      isSpeaking=false;setStatus(null);resolve();
+    };
+    window.speechSynthesis.speak(utt);
+  });
+}
+
+// ── ELEVENLABS TTS ──
+// One shared AudioContext reused across sentences — Chrome caps how many you can
+// open, and a long multi-sentence reply would otherwise exhaust them and freeze the jaw.
+let sharedAC=null;
+function getAC(){
+  if(!sharedAC){try{sharedAC=new(window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}}
+  return sharedAC;
+}
+
+// Fetch TTS audio for ONE sentence without playing it — lets us prefetch the next
+// line while the current one is still speaking. Returns a playable item (never throws).
+async function synthSentence(text){
+  if(config.ttsEngine==='browser') return {browser:true, text};
+  if(!config.elevenlabs) return {silent:true};
+  try{
+    const res=await fetch(`${API}/api/tts/${config.voice}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({elevenlabs_key:config.elevenlabs,text,model_id:'eleven_turbo_v2_5',voice_settings:{stability:0.25,similarity_boost:0.75,style:0.65,use_speaker_boost:true}})});
+    if(!res.ok){
+      // Surface the REAL reason ElevenLabs rejected us (key invalid, quota, bad
+      // voice id, etc.) instead of a bare status code.
+      let detail='';
+      try{ const j=await res.json(); detail=(j.detail&&(j.detail.message||j.detail.status))||JSON.stringify(j).slice(0,180); }catch(e){ try{ detail=(await res.text()).slice(0,180);}catch(_){} }
+      throw new Error('TTS '+res.status+(detail?(' — '+detail):''));
+    }
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    return {audio:new Audio(url), url, text};
+  }catch(e){log('[ ERR ] TTS: '+e.message,'err');return {silent:true};}
+}
+
+// Play one prepared item all the way to the end. Resolves only when it finishes —
+// this is what keeps sentences from overlapping.
+function playSentence(item){
+  return new Promise(async(resolve)=>{
+    if(!item||item.silent){resolve();return;}
+    if(interruptFlag){resolve();return;}      // interrupted before this clip could start
+    isSpeaking=true;setStatus('speak');awaitingReply=false;
+    if(item.text) noteSpoken(item.text);       // remember it, so Whisper can reject the echo
+    if(item.browser){await speakBrowser(item.text);isSpeaking=false;resolve();return;}
+    const audio=item.audio;currentAudio=audio;
+    // Drive jaw from audio waveform
+    try{
+      const ac=getAC();
+      if(ac){
+        if(ac.state==='suspended')await ac.resume();
+        const analyser=ac.createAnalyser();analyser.fftSize=256;
+        const src=ac.createMediaElementSource(audio);
+        src.connect(analyser);analyser.connect(ac.destination);
+        (function updateJaw(){
+          if(!isSpeaking||currentAudio!==audio)return;
+          const buf=new Float32Array(analyser.fftSize);
+          analyser.getFloatTimeDomainData(buf);
+          let sum=0;for(let i=0;i<buf.length;i++)sum+=buf[i]*buf[i];
+          jawAmp=Math.min(Math.sqrt(sum/buf.length)*5,1);
+          requestAnimationFrame(updateJaw);
+        })();
+      }
+    }catch(e){}
+    audio.onended=()=>{isSpeaking=false;setStatus(null);jawAmp=0;if(currentAudio===audio)currentAudio=null;URL.revokeObjectURL(item.url);resolve();};
+    audio.onerror=()=>{isSpeaking=false;setStatus(null);jawAmp=0;if(currentAudio===audio)currentAudio=null;URL.revokeObjectURL(item.url);resolve();};
+    audio.play();log('[ TTS ] Speaking...','ok');
+  });
+}
+
+// ── TEXT INPUT ──
+async function sendText(){
+  const inp=document.getElementById('text-input');const text=inp.value.trim();if(!text)return;inp.value='';
+  // Slash command: /language en|gr|bg|ru  OR  /language 1|2|3|4
+  if(text.toLowerCase().startsWith('/language')){
+    let code=text.split(/\s+/)[1];
+    if(code && /^[1-4]$/.test(code)) code=LANG_BY_NUMBER[parseInt(code)];
+    if(!code){log('[ LANG ] Usage: /language en|gr|bg|ru  or  /language 1-4','warn');}
+    else{setRecogLang(code);}
+    return;
+  }
+  // Person profiles: /person <name> switches (creates if new) · /person lists · /person none goes anonymous
+  if(text.toLowerCase().startsWith('/person')){
+    const name=text.slice('/person'.length).trim();
+    if(!name){await listPeople();}
+    else if(['none','clear','nobody'].includes(name.toLowerCase())){await clearPerson();}
+    else{await setPerson(name);}
+    return;
+  }
+  // In settings mode every typed line goes to the menu (except the exit command)
+  if(settingsMode){
+    addMessage('YOU',text);
+    if(text.toLowerCase()==='/settings'){exitSettings();addMessage('EREBUS','Settings closed.');return;}
+    await settingsTurn(text);
+    return;
+  }
+  if(text.toLowerCase()==='/settings'){ addMessage('YOU',text); await openSettings(); return; }
+  // Face recognition commands
+  if(text.toLowerCase().startsWith('/enroll')){
+    addMessage('YOU',text);
+    await enrollFace(text.slice('/enroll'.length).trim());
+    return;
+  }
+  if(text.toLowerCase()==='/faces'){ addMessage('YOU',text); await listFaces(); return; }
+  if(text.toLowerCase().startsWith('/forgetface')){
+    addMessage('YOU',text);
+    await forgetFace(text.slice('/forgetface'.length).trim());
+    return;
+  }
+  // Vision commands
+  if(text.toLowerCase()==='/look'){
+    if(!camActive){addMessage('EREBUS','My camera is off. Activate it first.');return;}
+    await lookOnce();return;
+  }
+  if(text.toLowerCase()==='/scan'){
+    if(!camActive){addMessage('EREBUS','My camera is off. Activate it first.');return;}
+    await scanObject();return;
+  }
+  // Show what he knows: current person's facts + global
+  if(text.toLowerCase()==='!facts'){
+    let out='';
+    if(memory.personName){
+      out+=`About ${memory.personName}:\n`+(memory.personFacts.length?memory.personFacts.map(f=>'- '+f).join('\n'):'- (nothing yet)');
+    } else {
+      out+='No active person.';
+    }
+    out+='\n\nGeneral:\n'+(memory.facts.length?memory.facts.map(f=>'- '+f).join('\n'):'- (nothing)');
+    addMessage('EREBUS',out);
+    return;
+  }
+  // Text memory command: !remember <thing to remember>
+  if(text.toLowerCase().startsWith('!remember')){
+    const fact=text.slice('!remember'.length).trim();
+    if(!fact){log('[ MEM ] Usage: !remember <thing to remember>','warn');addMessage('EREBUS','Tell me what to remember, like: !remember I love the Boxster 986');return;}
+    addMessage('YOU',text);
+    await rememberFact(fact,false);
+    return;
+  }
+  addMessage('YOU',text);detectLanguage(text);await askErebus(text);
+}
+function clearConversation(){conversationHistory=[];document.getElementById('transcript').innerHTML='';addMessage('EREBUS','Memory cleared.');log('[ SYS ] Cleared');}
+
+// Pull keys from the server's .env on startup and auto-fill config + fields.
+// Fields stay editable — edit + Save Config overrides for the session; a reload
+// re-reads .env, so .env stays the source of truth.
+async function loadKeysFromEnv(){
+  try{
+    const res=await fetch(`${API}/api/config`);
+    if(!res.ok)return;
+    const env=await res.json();
+    if(env.anthropic){config.anthropic=env.anthropic;const f=document.getElementById('cfg-anthropic');if(f)f.value=env.anthropic;}
+    if(env.elevenlabs){config.elevenlabs=env.elevenlabs;const f=document.getElementById('cfg-elevenlabs');if(f)f.value=env.elevenlabs;}
+    if(env.voice){config.voice=env.voice;const f=document.getElementById('cfg-voice');if(f)f.value=env.voice;}
+    const loaded=[env.anthropic&&'Anthropic',env.elevenlabs&&'ElevenLabs',env.voice&&'voice'].filter(Boolean);
+    if(loaded.length)log('[ CONF ] Auto-loaded from .env: '+loaded.join(', '),'ok');
+    else log('[ CONF ] No keys in .env — enter them in Config panel','warn');
+  }catch(e){log('[ CONF ] Could not reach server for .env keys','warn');}
+}
+
+loadKeysFromEnv();
+
+// ══ MEMORY GRAPH ═══════════════════════════════════════════════════════════
+// A monochrome, force-directed visualization of Erebus's knowledge vault.
+// Nodes = entities (people, projects, places...), lines = typed relationships.
+// Right-drag pans, wheel zooms, left-click expands a node into a readable card.
+// Uses a lightweight spring/repulsion simulation — no external library.
+const MemGraph = (function(){
+  let layer, canvas, ctx, countEl, statusEl;
+  let nodes = [], edges = [];
+  let view = { x: 0, y: 0, scale: 1 };   // pan + zoom
+  let dragging = false, dragStart = null, viewStart = null;
+  let running = false, rafId = null;
+  let hoverNode = null, openNode = null;
+  let simTicks = 0;
+
+  function el(id){ return document.getElementById(id); }
+
+  async function fetchGraph(){
+    try{
+      const r = await fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'vault_graph'})});
+      if(!r.ok) return {nodes:[],edges:[]};
+      return await r.json();
+    }catch(e){ log('[ MEM ] graph fetch failed: '+e,'err'); return {nodes:[],edges:[]}; }
+  }
+
+  // Seed node positions in a loose circle so the sim untangles quickly.
+  function initPositions(){
+    const cx = canvas.width/2, cy = canvas.height/2;
+    const R = Math.min(cx,cy)*0.6;
+    nodes.forEach((n,i)=>{
+      const a = (i/nodes.length)*Math.PI*2;
+      n.x = cx + Math.cos(a)*R*(0.4+Math.random()*0.6);
+      n.y = cy + Math.sin(a)*R*(0.4+Math.random()*0.6);
+      n.vx = 0; n.vy = 0;
+      // node size scales gently with how connected / mentioned it is
+      n.r = 8 + Math.min((n.mentions||1),6)*1.6;
+    });
+  }
+
+  // One physics step: repulsion between all nodes, spring pull along edges,
+  // gentle centering. Classic force-directed layout.
+  function simStep(){
+    const cx = canvas.width/2, cy = canvas.height/2;
+    const REPULSE = 9000, SPRING = 0.008, SPRING_LEN = 120, CENTER = 0.002, DAMP = 0.86;
+    for(let i=0;i<nodes.length;i++){
+      const a = nodes[i];
+      for(let j=i+1;j<nodes.length;j++){
+        const b = nodes[j];
+        let dx = a.x-b.x, dy = a.y-b.y;
+        let d2 = dx*dx+dy*dy || 1;
+        const f = REPULSE/d2;
+        const d = Math.sqrt(d2);
+        const ux = dx/d, uy = dy/d;
+        a.vx += ux*f*0.02; a.vy += uy*f*0.02;
+        b.vx -= ux*f*0.02; b.vy -= uy*f*0.02;
+      }
+      a.vx += (cx-a.x)*CENTER; a.vy += (cy-a.y)*CENTER;
+    }
+    for(const e of edges){
+      const a = nodeById[e.from], b = nodeById[e.to];
+      if(!a||!b) continue;
+      let dx = b.x-a.x, dy = b.y-a.y;
+      const d = Math.sqrt(dx*dx+dy*dy)||1;
+      const f = (d-SPRING_LEN)*SPRING;
+      const ux = dx/d, uy = dy/d;
+      a.vx += ux*f; a.vy += uy*f;
+      b.vx -= ux*f; b.vy -= uy*f;
+    }
+    for(const n of nodes){
+      n.vx *= DAMP; n.vy *= DAMP;
+      n.x += n.vx; n.y += n.vy;
+    }
+    simTicks++;
+  }
+
+  let nodeById = {};
+  function indexNodes(){ nodeById = {}; for(const n of nodes) nodeById[n.id] = n; }
+
+  // world <-> screen transform
+  function toScreen(x,y){ return [ (x+view.x)*view.scale, (y+view.y)*view.scale ]; }
+  function toWorld(sx,sy){ return [ sx/view.scale - view.x, sy/view.scale - view.y ]; }
+
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = getVar('--bg') || '#000';
+    ctx.fillRect(0,0,w,h);
+
+    // edges + labels
+    ctx.lineWidth = 1;
+    ctx.font = '10px "Share Tech Mono", monospace';
+    for(const e of edges){
+      const a = nodeById[e.from], b = nodeById[e.to];
+      if(!a||!b) continue;
+      const [ax,ay] = toScreen(a.x,a.y), [bx,by] = toScreen(b.x,b.y);
+      const lit = openNode && (e.from===openNode.id || e.to===openNode.id);
+      ctx.strokeStyle = lit ? '#ffffff' : 'rgba(150,150,150,0.35)';
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+      // relationship label at the midpoint
+      if(view.scale > 0.7){
+        const mx=(ax+bx)/2, my=(ay+by)/2;
+        ctx.fillStyle = lit ? 'rgba(255,255,255,0.85)' : 'rgba(160,160,160,0.55)';
+        ctx.textAlign='center';
+        ctx.fillText(e.type, mx, my-3);
+      }
+    }
+    // nodes
+    for(const n of nodes){
+      const [sx,sy] = toScreen(n.x,n.y);
+      const r = n.r * view.scale;
+      const isHover = n===hoverNode, isOpen = openNode && n.id===openNode.id;
+      // fill
+      ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2);
+      ctx.fillStyle = isOpen ? '#ffffff' : isHover ? '#dddddd' : '#111111';
+      ctx.fill();
+      ctx.lineWidth = isOpen||isHover ? 2 : 1;
+      ctx.strokeStyle = isOpen ? '#ffffff' : isHover ? '#ffffff' : '#777777';
+      ctx.stroke();
+      // label
+      if(view.scale > 0.45 || isHover){
+        ctx.fillStyle = isOpen ? '#ffffff' : '#cccccc';
+        ctx.font = (isHover||isOpen?'bold ':'')+'11px "Share Tech Mono", monospace';
+        ctx.textAlign='center';
+        ctx.fillText(n.name, sx, sy + r + 13);
+      }
+    }
+  }
+
+  function getVar(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  function resize(){
+    if(!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    const rect = layer.getBoundingClientRect();
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    canvas.width = rect.width; canvas.height = rect.height;  // logical px for our math
+  }
+
+  function loop(){
+    if(!running) return;
+    if(simTicks < 400) simStep();   // settle, then freeze the sim (still interactive)
+    draw();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function nodeAt(sx,sy){
+    for(let i=nodes.length-1;i>=0;i--){
+      const n = nodes[i];
+      const [nx,ny] = toScreen(n.x,n.y);
+      const r = n.r*view.scale + 4;
+      if((sx-nx)**2 + (sy-ny)**2 <= r*r) return n;
+    }
+    return null;
+  }
+
+  function expand(n){
+    openNode = n;
+    el('memnode-card').style.display = 'block';
+    el('memnode-title').textContent = n.name;
+    el('memnode-type').textContent = n.type;
+    // body: the facts. If long, they scroll inside the card.
+    const body = el('memnode-body');
+    if(n.facts && n.facts.length){
+      body.innerHTML = n.facts.map(f=>'• '+escapeHtml(f)).join('<br>');
+    }else{
+      body.innerHTML = '<span style="opacity:.6">Nothing recorded about this yet.</span>';
+    }
+    // connections
+    const linkEl = el('memnode-links');
+    const conns = [];
+    for(const e of edges){
+      if(e.from===n.id && nodeById[e.to]) conns.push(`${e.type} → ${nodeById[e.to].name}`);
+      else if(e.to===n.id && nodeById[e.from]) conns.push(`${nodeById[e.from].name} → ${e.type}`);
+    }
+    if(conns.length){
+      linkEl.style.display='block';
+      linkEl.innerHTML = '<span style="color:var(--red-dim);letter-spacing:.15em">CONNECTIONS</span><br>'
+        + conns.map(c=>escapeHtml(c)).join('<br>');
+    }else{
+      linkEl.style.display='none';
+    }
+  }
+  function escapeHtml(s){ return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  function closeNode(){ openNode=null; el('memnode-card').style.display='none'; }
+
+  function bindEvents(){
+    // right-drag pans; left-click selects/expands
+    canvas.addEventListener('contextmenu', e=>e.preventDefault());
+    canvas.addEventListener('mousedown', e=>{
+      if(e.button===2){                     // right button -> pan
+        dragging=true; dragStart=[e.offsetX,e.offsetY]; viewStart={...view};
+        canvas.style.cursor='grabbing';
+      }
+    });
+    window.addEventListener('mousemove', e=>{
+      if(!layer || layer.style.display==='none') return;
+      const rect = canvas.getBoundingClientRect();
+      const ox = e.clientX-rect.left, oy = e.clientY-rect.top;
+      if(dragging){
+        view.x = viewStart.x + (ox-dragStart[0])/view.scale;
+        view.y = viewStart.y + (oy-dragStart[1])/view.scale;
+      }else{
+        hoverNode = nodeAt(ox,oy);
+        canvas.style.cursor = hoverNode ? 'pointer' : 'grab';
+      }
+    });
+    window.addEventListener('mouseup', e=>{
+      if(e.button===2){ dragging=false; canvas.style.cursor='grab'; }
+    });
+    canvas.addEventListener('click', e=>{
+      const n = nodeAt(e.offsetX,e.offsetY);
+      if(n) expand(n); else closeNode();
+    });
+    canvas.addEventListener('wheel', e=>{
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const ox = e.clientX-rect.left, oy = e.clientY-rect.top;
+      const [wx,wy] = toWorld(ox,oy);
+      const factor = e.deltaY<0 ? 1.12 : 0.89;
+      view.scale = Math.max(0.2, Math.min(4, view.scale*factor));
+      // zoom toward cursor
+      view.x = ox/view.scale - wx;
+      view.y = oy/view.scale - wy;
+    }, {passive:false});
+  }
+
+  async function open(){
+    layer = el('memgraph-layer'); canvas = el('memgraph-canvas');
+    ctx = canvas.getContext('2d'); countEl = el('memgraph-count'); statusEl = el('memgraph-status');
+    layer.style.display='block';
+    resize();
+    statusEl.textContent = 'Loading his mind…';
+    const g = await fetchGraph();
+    nodes = g.nodes||[]; edges = g.edges||[];
+    indexNodes();
+    initPositions();
+    view = { x:0, y:0, scale:1 }; simTicks=0; openNode=null; closeNode();
+    countEl.textContent = nodes.length;
+    statusEl.textContent = nodes.length ? `${nodes.length} memories mapped` : 'No memories yet';
+    if(!nodes.length){
+      log('[ MEM ] graph is empty — he has learned nothing yet','warn');
+    }
+    if(!MemGraph._bound){ bindEvents(); window.addEventListener('resize', ()=>{ if(running) resize(); }); MemGraph._bound=true; }
+    running=true; loop();
+    log(`[ MEM ] memory graph open — ${nodes.length} nodes, ${edges.length} links`,'ok');
+  }
+  function close(){
+    running=false; if(rafId) cancelAnimationFrame(rafId);
+    if(layer) layer.style.display='none';
+    closeNode();
+  }
+  function isOpen(){ return running; }
+  return { open, close, isOpen, closeNode };
+})();
+
+let memGraphOpen = false;
+function toggleMemoryGraph(){
+  memGraphOpen = !memGraphOpen;
+  const btn = document.getElementById('btn-memory');
+  if(memGraphOpen){
+    MemGraph.open();
+    btn.textContent = '◈ HIDE MEMORY'; btn.classList.add('active');
+  }else{
+    MemGraph.close();
+    btn.textContent = '◇ VIEW MEMORY'; btn.classList.remove('active');
+  }
+}
+function closeMemNode(){ MemGraph.closeNode(); }
+
+loadMemory().then(()=>{
+  // Show memory stats in console
+  fetch(`${API}/api/memory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})})
+    .then(r=>r.json()).then(d=>log(`[ MEM ] Engine: ${d.engine} · ${d.conversations} convos · ${d.facts} facts`,'ok'))
+    .catch(()=>{});
+});
+// Init slider fills
+['creativity','curiosity','talk','emotion','volume'].forEach(id=>{
+  const sl=document.getElementById('sl-'+id);
+  if(sl) sl.style.setProperty('--val', sl.value+'%');
+});
+
+// ── 3D LOW-POLY FACE MASK ──
+(function() {
+  const canvas = document.getElementById('head-canvas');
+  const parent = canvas.parentElement;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Pull the background straight from the --bg CSS variable so the 3D scene,
+  // the panels and the vignette all restyle from that one value.
+  const BG_HEX = (getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#000000').replace('#','');
+  const BG_INT = parseInt(BG_HEX.length===3 ? BG_HEX.split('').map(c=>c+c).join('') : BG_HEX, 16) || 0x000000;
+  renderer.setClearColor(BG_INT, 1);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(BG_INT, 6, 14);
+
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
+  camera.position.set(0, 0, 3.2);
+
+  function resize() {
+    const w = parent.clientWidth, h = parent.clientHeight;
+    canvas.width = w * renderer.getPixelRatio();
+    canvas.height = h * renderer.getPixelRatio();
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+  resize();
+  new ResizeObserver(resize).observe(parent);
+
+  // ── HAND-CRAFTED FACIAL TOPOLOGY ──
+  // Vertices: [x, y, z] — face looks forward (+Z toward camera)
+  // Coordinate space: x=left/right, y=up/down, z=depth
+  const V = [
+  //  0: top center crown
+      0.00,  1.18,  0.10,
+  //  1: top left
+     -0.52,  1.05,  0.00,
+  //  2: top right
+      0.52,  1.05,  0.00,
+  //  3: left temple
+     -0.72,  0.72, -0.08,
+  //  4: right temple
+      0.72,  0.72, -0.08,
+  //  5: left forehead
+     -0.28,  0.88,  0.32,
+  //  6: right forehead
+      0.28,  0.88,  0.32,
+  //  7: center forehead
+      0.00,  0.92,  0.38,
+  //  8: left brow outer
+     -0.58,  0.52,  0.10,
+  //  9: left brow inner
+     -0.22,  0.58,  0.48,
+  // 10: right brow inner
+      0.22,  0.58,  0.48,
+  // 11: right brow outer
+      0.58,  0.52,  0.10,
+  // 12: left eye outer corner
+     -0.52,  0.35,  0.18,
+  // 13: left eye top
+     -0.32,  0.44,  0.48,
+  // 14: left eye bottom
+     -0.32,  0.26,  0.44,
+  // 15: left eye inner corner
+     -0.14,  0.35,  0.52,
+  // 16: right eye inner corner
+      0.14,  0.35,  0.52,
+  // 17: right eye top
+      0.32,  0.44,  0.48,
+  // 18: right eye bottom
+      0.32,  0.26,  0.44,
+  // 19: right eye outer corner
+      0.52,  0.35,  0.18,
+  // 20: nose bridge top
+      0.00,  0.38,  0.52,
+  // 21: nose bridge mid
+      0.00,  0.18,  0.60,
+  // 22: nose tip
+      0.00, -0.02,  0.72,
+  // 23: nose left wing
+     -0.18, -0.06,  0.60,
+  // 24: nose right wing
+      0.18, -0.06,  0.60,
+  // 25: left cheek high
+     -0.62,  0.10,  0.22,
+  // 26: right cheek high
+      0.62,  0.10,  0.22,
+  // 27: left cheek low
+     -0.58, -0.18,  0.12,
+  // 28: right cheek low
+      0.58, -0.18,  0.12,
+  // 29: left ear
+     -0.82,  0.22, -0.18,
+  // 30: right ear
+      0.82,  0.22, -0.18,
+  // 31: upper lip left
+     -0.22, -0.22,  0.60,
+  // 32: upper lip center
+      0.00, -0.18,  0.64,
+  // 33: upper lip right
+      0.22, -0.22,  0.60,
+  // 34: lower lip left (moves with jaw)
+     -0.20, -0.34,  0.58,
+  // 35: lower lip center (moves with jaw)
+      0.00, -0.32,  0.62,
+  // 36: lower lip right (moves with jaw)
+      0.20, -0.34,  0.58,
+  // 37: jaw left
+     -0.50, -0.48,  0.18,
+  // 38: jaw right
+      0.50, -0.48,  0.18,
+  // 39: chin
+      0.00, -0.68,  0.32,
+  // 40: left jaw back
+     -0.65, -0.35, -0.10,
+  // 41: right jaw back
+      0.65, -0.35, -0.10,
+  // 42: bottom left
+     -0.40, -0.85,  0.00,
+  // 43: bottom right
+      0.40, -0.85,  0.00,
+  // 44: left side mid
+     -0.78,  0.00, -0.12,
+  // 45: right side mid
+      0.78,  0.00, -0.12,
+  ];
+
+  // Faces (triangles) — CCW winding
+  const F = [
+    // FOREHEAD
+    0,1,5,  0,5,7,  0,7,6,  0,6,2,
+    1,3,5,  3,8,5,  2,4,6,  4,11,6,
+    5,8,9,  5,9,13, 5,13,7, 7,13,10,
+    7,10,17,7,17,6, 6,17,11,
+    // TEMPLES/SIDES
+    1,29,3, 3,29,8, 2,4,30, 4,30,11,
+    29,44,8, 8,44,12, 30,11,45, 11,45,19,
+    // LEFT EYE SOCKET SURROUND
+    8,12,9, 9,12,13, 9,13,15, 9,15,20, 9,20,10,
+    13,12,14, 12,25,14, 14,25,15,
+    // RIGHT EYE SOCKET SURROUND
+    11,10,19, 10,20,16, 10,16,17, 19,16,18, 19,18,26,
+    17,16,18, 18,16,15,
+    // EYE BRIDGES / NOSE BRIDGE
+    15,14,25, 15,25,23, 15,23,20,
+    16,20,24, 16,24,26, 16,26,18,
+    20,23,22, 20,22,24,
+    // NOSE
+    23,22,31, 24,33,22, 22,33,32, 22,32,31,
+    23,31,27, 24,28,33,
+    // CHEEKS
+    25,12,27, 12,44,27, 44,40,27,
+    26,28,19, 19,45,28, 45,41,28,
+    27,40,37, 28,38,41,
+    // UPPER LIP / MOUTH AREA
+    31,32,34, 32,35,34, 32,33,35, 33,36,35,
+    // LOWER LIP / JAW
+    34,35,37, 35,36,38, 35,38,37,
+    37,38,39, 37,39,42, 38,43,39,
+    // LOWER FACE SIDES
+    27,37,40, 28,41,38,
+    40,42,37, 41,38,43,
+    42,39,43,
+    // JAW SIDES
+    29,44,40, 44,27,40,
+    30,41,45, 45,28,41,
+  ];
+
+  const posArr = new Float32Array(V);
+  // Store base Y positions for jaw animation
+  const baseY = new Float32Array(V.length/3);
+  for(let i=0;i<V.length/3;i++) baseY[i] = V[i*3+1];
+  // Jaw verts: 34,35,36,37,38,39,42,43
+  const JAW_VERTS = [34,35,36,37,38,39,42,43];
+
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(posArr, 3);
+  geo.setAttribute('position', posAttr);
+  geo.setIndex(F);
+  geo.computeVertexNormals();
+
+  // Face material — metallic low-poly flat shading
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    metalness: 0.85,
+    roughness: 0.25,
+    flatShading: true,
+    transparent: true,
+    opacity: 0.92,
+    side: THREE.FrontSide,
+  });
+  const face = new THREE.Mesh(geo, faceMat);
+  scene.add(face);
+
+  // Mouth highlight geometry — separate bright mesh for lip faces
+  // Lip face indices: upper lip row + lower lip row triangles
+  const MOUTH_FACES = [
+    // Upper lip triangles (indices into F array)
+    31,32,34,  32,35,34,  32,33,35,  33,36,35,
+    // Lower lip
+    34,35,37,  35,36,38,  35,38,37,
+  ];
+  const mouthPositions = [];
+  const mouthIdx = [];
+  let mc = 0;
+  for(let i=0;i<MOUTH_FACES.length;i+=3){
+    const a=MOUTH_FACES[i], b=MOUTH_FACES[i+1], c2=MOUTH_FACES[i+2];
+    mouthPositions.push(V[a*3],V[a*3+1],V[a*3+2]);
+    mouthPositions.push(V[b*3],V[b*3+1],V[b*3+2]);
+    mouthPositions.push(V[c2*3],V[c2*3+1],V[c2*3+2]);
+    mouthIdx.push(mc,mc+1,mc+2); mc+=3;
+  }
+  const mouthGeo = new THREE.BufferGeometry();
+  const mouthPosAttr = new THREE.BufferAttribute(new Float32Array(mouthPositions),3);
+  mouthGeo.setAttribute('position', mouthPosAttr);
+  mouthGeo.setIndex(mouthIdx);
+  mouthGeo.computeVertexNormals();
+
+  const mouthMat = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    metalness: 1.0,
+    roughness: 0.05,
+    flatShading: true,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const mouthMesh = new THREE.Mesh(mouthGeo, mouthMat);
+  mouthMesh.renderOrder = 1;
+  scene.add(mouthMesh);
+
+  // Wireframe overlay
+  const wireGeo = new THREE.WireframeGeometry(geo);
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x999999, transparent: true, opacity: 0.6 });
+  const wire = new THREE.LineSegments(wireGeo, wireMat);
+  scene.add(wire);
+
+  // Vertex dots
+  const dotGeo = new THREE.BufferGeometry();
+  dotGeo.setAttribute('position', posAttr);
+  const dotMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.042, sizeAttenuation: true });
+  const dots = new THREE.Points(dotGeo, dotMat);
+  scene.add(dots);
+
+  // Fragment shards
+  const fragGroup = new THREE.Group();
+  scene.add(fragGroup);
+  let fragments = [];
+
+  function spawnFragments() {
+    while(fragGroup.children.length) fragGroup.remove(fragGroup.children[0]);
+    fragments = [];
+    for(let i=0;i<20;i++) {
+      const idx = Math.floor(Math.random()*(V.length/3));
+      const sx=posArr[idx*3], sy=posArr[idx*3+1], sz=posArr[idx*3+2];
+      const s = 0.04+Math.random()*0.1;
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0,s*(Math.random()-.5)*2,s*(Math.random()-.5)*2,0,s*(Math.random()-.5)*2,s*(Math.random()-.5)*2,s]),3));
+      sg.setIndex([0,1,2]); sg.computeVertexNormals();
+      const sm = new THREE.MeshBasicMaterial({color:0x999999,wireframe:true,transparent:true,opacity:0.8});
+      const shard = new THREE.Mesh(sg,sm);
+      shard.position.set(sx,sy,sz);
+      const spd=1.5+Math.random()*2;
+      const vel=new THREE.Vector3((sx+(Math.random()-.5)*0.5)*spd,(sy+(Math.random()-.5)*0.5)*spd,(sz+0.5)*spd*0.5);
+      fragments.push({mesh:shard,vel,life:1.0,rot:(Math.random()-.5)*0.14});
+      fragGroup.add(shard);
+    }
+  }
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0x1c1c1c, 1.2);
+  scene.add(ambient);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+  keyLight.position.set(0.5, 1, 2); scene.add(keyLight);
+  const rimLight = new THREE.DirectionalLight(0x808080, 1.2);
+  rimLight.position.set(-2, -0.5, -1); scene.add(rimLight);
+  const fillLight = new THREE.DirectionalLight(0x444444, 0.8);
+  fillLight.position.set(1, -1, 1); scene.add(fillLight);
+  // Dedicated mouth light — shines up from below to catch lip faces
+  const mouthLight = new THREE.PointLight(0xffffff, 6.0, 2.5);
+  mouthLight.position.set(0, -0.3, 1.6); scene.add(mouthLight);
+
+  // Expression color map
+  const COLORS = {
+    neutral:  {face:0x1a1a1a, wire:0x999999, key:0xcccccc},
+    speaking: {face:0x222222, wire:0xffffff, key:0xffffff},
+    listening:{face:0x171717, wire:0xcccccc, key:0xdddddd},
+    thinking: {face:0x141414, wire:0x777777, key:0x999999},
+    angry:    {face:0x232323, wire:0xffffff, key:0xffffff},
+    surprised:{face:0x202020, wire:0xeeeeee, key:0xffffff},
+    smug:     {face:0x161616, wire:0xaaaaaa, key:0xbbbbbb},
+    offline:  {face:0x080808, wire:0x333333, key:0x222222},
+  };
+
+  let wasSpeak = false, t = 0;
+  let prevJawAmp = 0;
+  let wasSpike = false;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    t += 0.016;
+
+    const expr = expressionOverride || (isSpeaking?'speaking': isListening?'listening':'neutral');
+    const col = COLORS[expr] || COLORS.neutral;
+
+    // Spike decays smoothly each frame (a brief burst of intensity, then settle).
+    expressionSpike += (0 - expressionSpike) * 0.03;
+    const spike = Math.max(0, expressionSpike);
+
+    faceMat.color.setHex(col.face);
+    wireMat.color.setHex(col.wire);
+    keyLight.color.setHex(col.key);
+    dotMat.color.setHex(expr==='offline'?0x333333:0xdddddd);
+    // On a spike, briefly brighten the wireframe so the emotion "reads" for a moment.
+    if(spike>0.02){ wireMat.opacity = 0.6 + spike*0.4; dotMat.size = 0.042 + spike*0.03; }
+    else { wireMat.opacity = 0.6; dotMat.size = 0.042; }
+
+    // ── Subtle per-expression posture (small; he's composed) ──
+    let swayX = Math.sin(t*0.28)*0.04;
+    let swayY = Math.sin(t*0.19)*0.06;
+    let tiltZ = 0, lean = 0;
+    if(expr==='thinking'){ tiltZ = 0.06; swayY *= 0.4; lean = -0.05; }
+    else if(expr==='listening'){ lean = 0.06; swayY *= 0.6; }
+    else if(expr==='smug'){ tiltZ = -0.05; }
+    else if(expr==='surprised'){ lean = 0.05 + spike*0.06; swayX -= 0.03; }
+    else if(expr==='angry'){ lean = 0.04; swayX += 0.02; }
+    const k = 1 + spike*1.2;
+    face.rotation.x = (swayX - lean*0.5);
+    face.rotation.y = swayY;
+    face.rotation.z = tiltZ * k;
+    face.position.z = lean * k * 0.5;
+    wire.rotation.copy(face.rotation); wire.position.copy(face.position);
+    dots.rotation.copy(face.rotation); dots.position.copy(face.position);
+    fragGroup.rotation.copy(face.rotation);
+    if(spike>0.55 && !wasSpike){ spawnFragments(); wasSpike=true; }
+    if(spike<0.2) wasSpike=false;
+    // mouthMesh rotation handled in jaw block
+
+    // Jaw animation — smooth lerp
+    prevJawAmp += ((jawAmp||0) - prevJawAmp) * 0.35;
+    const drop = prevJawAmp * 0.38;
+    for(const vi of JAW_VERTS) {
+      posAttr.setY(vi, baseY[vi] - drop);
+    }
+    posAttr.needsUpdate = true;
+    geo.computeVertexNormals();
+
+    // Sync mouth highlight mesh with jaw movement
+    // Rebuild mouth positions from updated main geometry
+    let mmc = 0;
+    for(let i=0;i<MOUTH_FACES.length;i+=3){
+      const a=MOUTH_FACES[i], b=MOUTH_FACES[i+1], c2=MOUTH_FACES[i+2];
+      for(const vi of [a,b,c2]){
+        mouthPosAttr.setXYZ(mmc, posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi));
+        mmc++;
+      }
+    }
+    mouthPosAttr.needsUpdate = true;
+    mouthGeo.computeVertexNormals();
+    mouthMesh.rotation.copy(face.rotation);
+    mouthMesh.position.copy(face.position);
+
+    // Mouth color shifts when speaking
+    mouthMat.color.setHex(isSpeaking ? 0xffffff : 0xcccccc);
+    mouthMat.emissive.setHex(isSpeaking ? 0x555555 : 0x111111);
+    mouthMat.emissiveIntensity = isSpeaking ? 0.6 : 0.2;
+
+    // Speaking fragments
+    if(isSpeaking && !wasSpeak) spawnFragments();
+    wasSpeak = isSpeaking;
+
+    // Update fragments
+    for(let i=fragments.length-1;i>=0;i--) {
+      const f=fragments[i]; f.life-=0.013;
+      if(f.life<=0){fragGroup.remove(f.mesh);fragments.splice(i,1);continue;}
+      f.mesh.position.addScaledVector(f.vel,0.013);
+      f.vel.multiplyScalar(0.96);
+      f.mesh.rotation.z+=f.rot;
+      f.mesh.material.opacity=f.life*0.85;
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+  log('[ 3D  ] Face mask initialized','ok');
+})();
+</script>
+</body>
+</html>

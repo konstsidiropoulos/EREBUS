@@ -1,0 +1,6 @@
+# Core server has no third-party dependencies (plain stdlib http.server).
+#
+# Optional: local, offline speech-to-text (whisper_mic.py)
+faster-whisper
+sounddevice
+numpy

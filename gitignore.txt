@@ -1,0 +1,15 @@
+.env
+env.txt
+__pycache__/
+*.pyc
+.chrome_erebus/
+whisper_env/
+memory.json
+vault.json
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
